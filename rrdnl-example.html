@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<style>
+body {
+	background-color: hsl(30,20%, 95%);
+}
+script {
+	display: block;
+	white-space: pre;
+	margin-top: -1em;
+}
+</style>
+<link rel='stylesheet' href='railroad-diagrams.css'>
+
+<script> var exports = {}; </script>
+<script src='./out/rrdnl-bundle.js'></script>
+<body>
+	
+	
+<h1 id=seq_grp>Sequence Group</h1>
+<h2 id=seq_imp>Implicit Sequence Notation</h2>
+<script>
+let seq_ex1 = `X Y Z`;
+new DiagramParser(seq_ex1).parse().addTo();
+</script>
+
+<h2 id=seq_emp>Explicit Sequence Notation</h2>
+<script>
+let seq_ex2 = `<- X Y Z ->`;
+new DiagramParser(seq_ex2).parse().addTo();
+</script>
+
+<h2 id=seq_alt>Alternating Sequence Notation</h2>
+<script>
+let seq_ex3 = `<@ x y @>`;
+new DiagramParser(seq_ex3).parse().addTo();
+</script>
+
+<h2 id=seq_opt>Optional Sequence Notation</h2>
+<script>
+let seq_ex4 = `<?x y z?>`;
+new DiagramParser(seq_ex4).parse().addTo();
+</script>
+
+<hr>
+
+<h1 id=cho_grp>Choice Group</h1>
+<h2 id=cho_std>Standard Choice Notation</h2>
+<script>
+let cho_ex1 = `(?x|y|z?)`;
+new DiagramParser(cho_ex1).parse().addTo();
+</script>
+
+<h2 id=cho_pre>Preferred Choice Notation</h2>
+<script>
+let cho_ex2 = `(?x|:y|z?)`;
+new DiagramParser(cho_ex2).parse().addTo();
+</script>
+
+<h2 id=cho_hor>Horizontal Choice Notation</h2>
+<script>
+let cho_ex3 = `(- x|y|z -)`;
+new DiagramParser(cho_ex3).parse().addTo();
+</script>
+
+<h2 id=cho_m1>All Multi Choice Notation</h2>
+<script>
+let cho_ex4 = `($ x|y|:z $)`;
+new DiagramParser(cho_ex4).parse().addTo();
+</script>
+
+<h2 id=cho_m1>Any Multi Choice Notation</h2>
+<script>
+let cho_ex5 = `(& x|y|z &)`;
+new DiagramParser(cho_ex5).parse().addTo();
+</script>
+
+<hr>
+
+<h1 id=or_grp>Optional-Repeat Group</h1>
+
+<h2 id=or_o1>Optional standard Notation</h2>
+<script>
+let or_ex1 = `[x]`;
+new DiagramParser(or_ex1).parse().addTo();
+</script>
+
+<h2 id=or_o2>Optional preferred Notation</h2>
+<script>
+let or_ex2 = `[:x]`;
+new DiagramParser(or_ex2).parse().addTo();
+</script>
+
+<h2 id=or_o3>Optional multi Notation</h2>
+<script>
+let or_ex3 = `[:x y z]`;
+new DiagramParser(or_ex3).parse().addTo();
+</script>
+
+<h2 id=or_r1>Repeat standard Notation</h2>
+<script>
+let or_ex4 = `{x}`;
+new DiagramParser(or_ex4).parse().addTo();
+</script>
+
+<h2 id=or_r2>Repeat multi standard Notation</h2>
+<script>
+let or_ex5 = `{x y z}`;
+new DiagramParser(or_ex5).parse().addTo();
+</script>
+
+<h2 id=or_r3>Repeat multi w/ seperator standard Notation</h2>
+<script>
+let or_ex6 = `{x|y z}`;
+new DiagramParser(or_ex6).parse().addTo();
+</script>
+
+<h2 id=or_c1>Optional/Repeat combo standard Notation</h2>
+<script>
+let or_ex7 = `[{x y}]`;
+new DiagramParser(or_ex7).parse().addTo();
+</script>
+
+<h2 id=or_c2>Optional/Repeat combo w/ preference Notation</h2>
+<script>
+let or_ex8 = `[:{x y}]`;
+new DiagramParser(or_ex8).parse().addTo();
+</script>
+
+<h2 id=or_c3>Optional/Repeat combo w/ separator Notation</h2>
+<script>
+let or_ex9 = `[{x y | z}]`;
+new DiagramParser(or_ex9).parse().addTo();
+</script> 
+
+<h1 id=c_grp>Controls Group</h1>
+
+<h2 id=c_t1>Terminal simple Notation</h2>
+<script>
+let c_ex1 = `x "terminal name" y`;
+new DiagramParser(c_ex1).parse().addTo();
+</script>
+
+<h2 id=c_t1>Terminal w/ URL Notation</h2>
+<script>
+let c_ex2 = `x "terminal name w/ URL|http://google.com" y`;
+new DiagramParser(c_ex2).parse().addTo();
+</script>
+
+<h2 id=c_nt1>Non-Terminal simple Notation</h2>
+<script>
+let c_ex3 = `x <"terminal name"> y`;
+new DiagramParser(c_ex3).parse().addTo();
+</script> 
+
+<h2 id=c_nt2>Non-Terminal w/ URL Notation</h2>
+<script>
+let c_ex4 = `x <"terminal name w/ URL|http://google.com"> y`;
+new DiagramParser(c_ex4).parse().addTo();
+</script>
+
+<h2 id=c_nt3>Comment standard Notation</h2>
+<script>
+let c_ex5 = `/"Terminal name here."/`;
+new DiagramParser(c_ex5).parse().addTo();
+</script>
+
+<h2 id=c_nt4>Comment w/ URL and escaping Notation</h2>
+<script>
+let c_ex6 = `/"terminal name w\\"/ URL|http://google.com"/`;
+new DiagramParser(c_ex6).parse().addTo();
+</script>
+
+
+<h1 id=aux_grp>Auxilary Group</h1>
+
+<h2 id=aux_a1>Start standard Notation</h2>
+<script>
+	let a_ex7 = `=[|=`;
+	new DiagramParser(a_ex7).parse().addTo();
+</script>
+
+<h2 id=aux_a2>Start complex w\ join to SOL Notation</h2>
+<script>
+	let a_ex8 = `+=[|=`;
+	new DiagramParser(a_ex8).parse().addTo();
+</script>
+ 
+<h2 id=aux_a3>Start w\ join to SOL text, URL and simple Notation</h2>
+<script>
+	let a_ex9 = `+=[Go|http:\\google.com=`;
+	new DiagramParser(a_ex9).parse().addTo();
+</script>
+
+<h2 id=aux_a4>End standard Notation</h2>
+<script>
+	let a_ex10 = `=|]=`;
+	new DiagramParser(a_ex10).parse().addTo();
+</script>
+
+<h2 id=aux_a5>End complex w\ join to SOL Notation</h2>
+<script>
+	let a_ex11 = `=|]=+`;
+	new DiagramParser(a_ex11).parse().addTo();
+</script>
+
+<h2 id=aux_a6>End w\ join to SOL text, URL and simple Notation</h2>
+<script>
+	let a_ex12 = `=Go|http:\\google.com]=+`;
+	new DiagramParser(a_ex12).parse().addTo();
+</script> 
+
+<h2 id=aux_a7>Skip past</h2>
+<script>
+	let a_ex13 = `(? ~ | x | ~ /"?"/ ?)`;
+	new DiagramParser(a_ex13).parse().addTo();
+</script>
+
+
+<h2 id=aux_a8>Pragma Debug toggle</h2>
+<script>
+	let a_ex14 = `@dbg "toggled on" @dbg "toggled off"`;
+	let d_ex14 = new DiagramParser(a_ex14)
+	let rslt_ex14 = d_ex14.parse();
+	document.write(`<code>` + d_ex14.prepareTroubleshootingHint() + `</code>`);
+	rslt_ex14.addTo();
+</script>
+
+<h2 id=aux_a9>Pragma Arrow toggle</h2>
+<script>
+	let a_ex15 = `@arw "toggled on" @arw "toggled off"`;
+	let d_ex15 = new DiagramParser(a_ex15)
+	let rslt_ex15 = d_ex15.parse();
+	document.write(`<code>` + d_ex15.prepareTroubleshootingHint() + `</code>`);
+	rslt_ex15.addTo();
+</script>
+
+<h2 id=aux_a10>Pragma Escape char</h2>
+<script>
+	let a_ex16 = `@esc! "changed" @esc* "changed again"`;
+	let d_ex16 = new DiagramParser(a_ex16)
+	let rslt_ex16 = d_ex16.parse();
+	document.write(`<code>` + d_ex16.prepareTroubleshootingHint() + `</code>`);
+	rslt_ex16.addTo();
+</script>
+
+</body>
