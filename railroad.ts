@@ -1,3 +1,43 @@
+"use strict";
+/*
+Railroad Diagrams
+by Tab Atkins Jr. (and others)
+http://xanthir.com
+http://twitter.com/tabatkins
+http://github.com/tabatkins/railroad-diagrams
+
+This document and all associated files in the github project are licensed under CC0: http://creativecommons.org/publicdomain/zero/1.0/
+This means you can reuse, remix, or otherwise appropriate this project for your own use WITHOUT RESTRICTION.
+(The actual legal meaning can be found at the above link.)
+Don't ask me for permission to use any part of this project, JUST USE IT.
+I would appreciate attribution, but that is not required by the license.
+*/
+
+// Export function versions of all the constructors.
+// Each class will add itself to this object.
+const funcs = {
+	Diagram: undefined,
+	ComplexDiagram: undefined,
+	Sequence: undefined,
+	Stack: undefined,
+	OptionalSequence: undefined,
+	AlternatingSequence: undefined,
+	Choice: undefined,
+	HorizontalChoice: undefined,
+	MultipleChoice: undefined,
+	Optional: undefined,
+	ZeroOrMore: undefined,
+	OneOrMore: undefined,
+	Start: undefined,
+	End: undefined,
+	Terminal: undefined,
+	NonTerminal: undefined,
+	Comment: undefined,
+	Skip: undefined,
+	Block: undefined,
+};
+export default funcs;
+
 export const Options = {
 	DEBUG: false, // if true, writes some debug information into attributes
 	VS: 8, // minimum vertical separation between things. For a 3px stroke, must be at least 4
@@ -9,19 +49,36 @@ export const Options = {
 	COMMENT_CHAR_WIDTH: 7, // comments are in smaller text by default
 };
 
+
 export class FakeSVG {
-  children: any;
-  tagName: string;
-  attrs: any;
-	constructor(tagName: string, attrs?: object, text?: any) {
+	children: any;
+	tagName: string;
+	attrs = {
+		d: "",
+		width: 0,
+		height: 0,
+		viewBox: "",
+		class: undefined,
+	};
+	up: number;
+	down: number;
+	height: number;
+	width: number;
+	needsSpace: boolean;
+
+	constructor(tagName: string, attrs?: object, text?: string|FakeSVG[]) {
 		if(text) this.children = text;
 		else this.children = [];
 		this.tagName = tagName;
-		this.attrs = unnull(attrs, {});
-  }
-  
-	format(x, y, width) {
-		// Virtual
+		if (attrs)
+			this.attrs = {...this.attrs, ...attrs};
+	}
+
+	format(): FakeSVG;
+	format(x?, y?, width?): FakeSVG;
+	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
+			// Virtual
+		return undefined;
 	}
 	addTo(parent) {
 		if(parent instanceof FakeSVG) {
@@ -64,6 +121,7 @@ export class FakeSVG {
 	}
 }
 
+
 export class Path extends FakeSVG {
 	constructor(x,y) {
 		super('path');
@@ -83,8 +141,8 @@ export class Path extends FakeSVG {
 		this.attrs.d += 'v'+val;
 		return this;
 	}
-	down(val) { return this.v(Math.max(0, val)); }
-	up(val) { return this.v(-Math.max(0, val)); }
+	downFn(val) { return this.v(Math.max(0, val)); }
+	upFn(val) { return this.v(-Math.max(0, val)); }
 	arc(sweep){
 		// 1/4 of a circle
 		var x = Options.AR;
@@ -145,15 +203,11 @@ export class Path extends FakeSVG {
 	}
 }
 
-export class Diagram extends FakeSVG {
-  items: any[];
-  up : number;
-  down : number;
-  width : number;
-  height : number;
-  formatted : boolean;
 
-  constructor(...items) {
+export class Diagram extends FakeSVG {
+	items: (FakeSVG | Terminal | Start | End)[];
+	formatted: boolean;
+	constructor(...items) {
 		super('svg', {class: Options.DIAGRAM_CLASS});
 		this.items = items.map(wrapString);
 		if(!(this.items[0] instanceof Start)) {
@@ -171,7 +225,7 @@ export class Diagram extends FakeSVG {
 		}
 		this.formatted = false;
 	}
-	format(paddingt?, paddingr?, paddingb?, paddingl?) {
+	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
 		paddingt = unnull(paddingt, 20);
 		paddingr = unnull(paddingr, paddingt, 20);
 		paddingb = unnull(paddingb, paddingt, 20);
@@ -180,12 +234,15 @@ export class Diagram extends FakeSVG {
 		var y = paddingt;
 		y += this.up;
 		var g = new FakeSVG('g', Options.STROKE_ODD_PIXEL_LENGTH ? {transform:'translate(.5 .5)'} : {});
+		let extraViewboxHeight = 0; 		
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			if(item.needsSpace) {
 				new Path(x,y).h(10).addTo(g);
 				x += 10;
 			}
+			if (item instanceof Choice) // diagram viewbox height defect for Choice/Stack combo
+				extraViewboxHeight += item.extraHeight ? item.extraHeight: 0; 
 			item.format(x, y, item.width).addTo(g);
 			x += item.width;
 			y += item.height;
@@ -195,7 +252,7 @@ export class Diagram extends FakeSVG {
 			}
 		}
 		this.attrs.width = this.width + paddingl + paddingr;
-		this.attrs.height = this.up + this.height + this.down + paddingt + paddingb;
+		this.attrs.height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
 		this.attrs.viewBox = "0 0 " + this.attrs.width + " " + this.attrs.height;
 		g.addTo(this);
 		this.formatted = true;
@@ -204,56 +261,52 @@ export class Diagram extends FakeSVG {
 	addTo(parent) {
 		if(!parent) {
 			var scriptTag = document.getElementsByTagName('script');
-			let scriptTag2 = scriptTag[scriptTag.length - 1];
-			parent = scriptTag2.parentNode;
+			let scriptTagItem = scriptTag[scriptTag.length - 1];
+			parent = scriptTagItem.parentNode;
 		}
-		return super.addTo(parent);
+		return super.addTo.call(this, parent);
 	}
 	toSVG() {
 		if (!this.formatted) {
 			this.format();
 		}
-		return super.toSVG();
+		return super.toSVG.call(this);
 	}
 	toString() {
 		if (!this.formatted) {
 			this.format();
 		}
-		return super.toString();
+		return super.toString.call(this);
 	}
 }
+funcs.Diagram = (...args)=>new Diagram(...args);
 
-export class ComplexDiagram extends Diagram {
+
+export class ComplexDiagram extends FakeSVG {
 	constructor(...items) {
-		super(...items);
-		this.items[0] = new Start("complex");
-		this.items[this.items.length-1] = new End("complex");
+		super('svg');
+		var diagram = new Diagram(...items);
+		diagram.items[0] = new Start({type:"complex"});
+		diagram.items[diagram.items.length-1] = new End({type:"complex"});
+		return diagram;
 	}
 }
+funcs.ComplexDiagram = (...args)=>new ComplexDiagram(...args);
 
-export class Component extends FakeSVG {
-  up : number = 0;
-  down : number = 0;
-  width : number = 0;
-  height : number = 0;
-  needsSpace: boolean = true;
 
-	constructor() {
+export class Sequence extends FakeSVG {
+	items: (FakeSVG | Terminal)[];
+	needsSpace: boolean;
+	up: number;
+	down: number;
+	height: number;
+	width: number;
+	constructor(...items) {
 		super('g');
-  }
-}
-
-export class Container extends Component {
-  items: any;
-	constructor(...items) {
-    super();
-    this.items = items.map(wrapString);
-  }
-}
-
-export class Sequence extends Container {
-	constructor(...items) {
-    super(...items);
+		this.items = items.map(wrapString);
+		var numberOfItems = this.items.length;
+		this.needsSpace = true;
+		this.up = this.down = this.height = this.width = 0;
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			this.width += item.width + (item.needsSpace?20:0);
@@ -268,11 +321,12 @@ export class Sequence extends Container {
 			this.attrs['data-type'] = "sequence";
 		}
 	}
-	format(x,y,width) {
+	format(x?,y?,width?) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		if (!(this.items[this.items.length-1] instanceof End))
+			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
 		x += gaps[0];
 
 		for(var i = 0; i < this.items.length; i++) {
@@ -292,14 +346,25 @@ export class Sequence extends Container {
 		return this;
 	}
 }
+funcs.Sequence = (...args)=>new Sequence(...args);
 
-export class Stack extends Container {
+
+export class Stack extends FakeSVG {
+	items: (FakeSVG | Terminal)[];
+	width: any;
+	needsSpace: boolean;
+	up: any;
+	down: any;
+	height: number;
 	constructor(...items) {
-    super(...items);
+		super('g');
 		if( items.length === 0 ) {
 			throw new RangeError("Stack() must have at least one child.");
 		}
+		this.items = items.map(wrapString);
 		this.width = Math.max.apply(null, this.items.map(function(e) { return e.width + (e.needsSpace?20:0); }));
+		//if(this.items[0].needsSpace) this.width -= 10;
+		//if(this.items[this.items.length-1].needsSpace) this.width -= 10;
 		if(this.items.length > 1){
 			this.width += Options.AR*2;
 		}
@@ -324,7 +389,7 @@ export class Stack extends Container {
 			this.attrs['data-type'] = "stack";
 		}
 	}
-	format(x,y,width) {
+	format(x?,y?,width?) {
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
 		x += gaps[0];
@@ -334,6 +399,7 @@ export class Stack extends Container {
 			x += Options.AR;
 		}
 
+		let lastItem;		
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			var innerWidth = this.width - (this.items.length>1 ? Options.AR*2 : 0);
@@ -343,19 +409,20 @@ export class Stack extends Container {
 
 			if(i !== this.items.length-1) {
 				new Path(x, y)
-					.arc('ne').down(Math.max(0, item.down + Options.VS - Options.AR*2))
+					.arc('ne').downFn(Math.max(0, item.down + Options.VS - Options.AR*2))
 					.arc('es').left(innerWidth)
-					.arc('nw').down(Math.max(0, this.items[i+1].up + Options.VS - Options.AR*2))
+					.arc('nw').downFn(Math.max(0, this.items[i+1].up + Options.VS - Options.AR*2))
 					.arc('ws').addTo(this);
 				y += Math.max(item.down + Options.VS, Options.AR*2) + Math.max(this.items[i+1].up + Options.VS, Options.AR*2);
 				//y += Math.max(Options.AR*4, item.down + Options.VS*2 + this.items[i+1].up)
 				x = xInitial+Options.AR;
 			}
-
+			lastItem = item;
 		}
 
 		if(this.items.length > 1) {
-			new Path(x,y).h(Options.AR).addTo(this);
+			if (!(lastItem instanceof End))	
+				new Path(x,y).h(Options.AR).addTo(this);
 			x += Options.AR;
 		}
 		new Path(x,y).h(gaps[1]).addTo(this);
@@ -363,18 +430,30 @@ export class Stack extends Container {
 		return this;
 	}
 }
+funcs.Stack = (...args)=>new Stack(...args);
 
-export class OptionalSequence extends Container {
+
+export class OptionalSequence extends FakeSVG {
+	items: (FakeSVG | Terminal)[];
+	needsSpace: boolean;
+	width: number;
+	up: number;
+	height: any;
+	down: any;
 	constructor(...items) {
-		super(...items);
+		super('g');
 		if( items.length === 0 ) {
 			throw new RangeError("OptionalSequence() must have at least one child.");
 		}
 		if( items.length === 1 ) {
-			return new Sequence(items);
+			items.push(new Skip());
+			// return new Sequence(items);
 		}
 		var arc = Options.AR;
+		this.items = items.map(wrapString);
 		this.needsSpace = false;
+		this.width = 0;
+		this.up = 0;
 		this.height = sum(this.items, function(x){return x.height});
 		this.down = this.items[0].down;
 		var heightSoFar = 0;
@@ -397,7 +476,7 @@ export class OptionalSequence extends Container {
 			this.attrs['data-type'] = "optseq";
 		}
 	}
-	format(x, y, width) {
+	format(x?, y?, width?) {
 		var arc = Options.AR;
 		var gaps = determineGaps(width, this.width);
 		new Path(x, y).right(gaps[0]).addTo(this);
@@ -413,11 +492,11 @@ export class OptionalSequence extends Container {
 				// Upper skip
 				new Path(x,y)
 					.arc('se')
-					.up(y - upperLineY - arc*2)
+					.upFn(y - upperLineY - arc*2)
 					.arc('wn')
 					.right(itemWidth - arc)
 					.arc('ne')
-					.down(y + item.height - upperLineY - arc*2)
+					.downFn(y + item.height - upperLineY - arc*2)
 					.arc('ws')
 					.addTo(this);
 				// Straight line
@@ -434,7 +513,7 @@ export class OptionalSequence extends Container {
 				new Path(x, upperLineY)
 					.right(arc*2 + Math.max(itemWidth, arc) + arc)
 					.arc('ne')
-					.down(y - upperLineY + item.height - arc*2)
+					.downFn(y - upperLineY + item.height - arc*2)
 					.arc('ws')
 					.addTo(this);
 				// Straight line
@@ -448,11 +527,11 @@ export class OptionalSequence extends Container {
 				// Lower skip
 				new Path(x,y)
 					.arc('ne')
-					.down(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
+					.downFn(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
 					.arc('ws')
 					.right(itemWidth - arc)
 					.arc('se')
-					.up(item.down + Options.VS - arc*2)
+					.upFn(item.down + Options.VS - arc*2)
 					.arc('wn')
 					.addTo(this);
 				x += arc*2 + Math.max(itemWidth, arc) + arc;
@@ -469,11 +548,11 @@ export class OptionalSequence extends Container {
 				// Lower skip
 				new Path(x,y)
 					.arc('ne')
-					.down(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
+					.downFn(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
 					.arc('ws')
 					.right(itemWidth - arc)
 					.arc('se')
-					.up(item.down + Options.VS - arc*2)
+					.upFn(item.down + Options.VS - arc*2)
 					.arc('wn')
 					.addTo(this);
 			}
@@ -481,16 +560,26 @@ export class OptionalSequence extends Container {
 		return this;
 	}
 }
+funcs.OptionalSequence = (...args)=>new OptionalSequence(...args);
 
-export class AlternatingSequence extends Sequence {
+
+export class AlternatingSequence extends FakeSVG {
+	items: (FakeSVG | Terminal)[];
+	needsSpace: boolean;
+	up: any;
+	down: any;
+	height: number;
+	width: number;
 	constructor(...items) {
-		super(...items);
+		super('g');
 		if( items.length === 1 ) {
-			return;
+			items.push(new Skip());
+			// return new Sequence(items);
 		}
 		if( items.length !== 2 ) {
 			throw new RangeError("AlternatingSequence() must have one or two children.");
 		}
+		this.items = items.map(wrapString);
 		this.needsSpace = false;
 
 		const arc = Options.AR;
@@ -521,11 +610,7 @@ export class AlternatingSequence extends Sequence {
 			this.attrs['data-type'] = "altseq";
 		}
 	}
-	format(x, y, width) {
-		if( this.items.length === 1 ) {
-			return super.format(x, y, width);
-		}
-
+	format(x?, y?, width?) {
 		const arc = Options.AR;
 		const gaps = determineGaps(width, this.width);
 		new Path(x,y).right(gaps[0]).addTo(this);
@@ -533,23 +618,23 @@ export class AlternatingSequence extends Sequence {
 		x += gaps[0];
 		new Path(x+this.width, y).right(gaps[1]).addTo(this);
 		// bounding box
-		//new Path(x+gaps[0], y).up(this.up).right(this.width).down(this.up+this.down).left(this.width).up(this.down).addTo(this);
+		//new Path(x+gaps[0], y).upFn(this.up).right(this.width).downFn(this.up+this.down).left(this.width).upFn(this.down).addTo(this);
 		const first = this.items[0];
 		const second = this.items[1];
 
 		// top
 		const firstIn = this.up - first.up;
 		const firstOut = this.up - first.up - first.height;
-		new Path(x,y).arc('se').up(firstIn-2*arc).arc('wn').addTo(this);
+		new Path(x,y).arc('se').upFn(firstIn-2*arc).arc('wn').addTo(this);
 		first.format(x + 2*arc, y - firstIn, this.width - 4*arc).addTo(this);
-		new Path(x + this.width - 2*arc, y - firstOut).arc('ne').down(firstOut - 2*arc).arc('ws').addTo(this);
+		new Path(x + this.width - 2*arc, y - firstOut).arc('ne').downFn(firstOut - 2*arc).arc('ws').addTo(this);
 
 		// bottom
 		const secondIn = this.down - second.down - second.height;
 		const secondOut = this.down - second.down;
-		new Path(x,y).arc('ne').down(secondIn - 2*arc).arc('ws').addTo(this);
+		new Path(x,y).arc('ne').downFn(secondIn - 2*arc).arc('ws').addTo(this);
 		second.format(x + 2*arc, y + secondIn, this.width - 4*arc).addTo(this);
-		new Path(x + this.width - 2*arc, y + secondOut).arc('se').up(secondOut - 2*arc).arc('wn').addTo(this);
+		new Path(x + this.width - 2*arc, y + secondOut).arc('se').upFn(secondOut - 2*arc).arc('wn').addTo(this);
 
 		// crossover
 		const arcX = 1 / Math.sqrt(2) * arc * 2;
@@ -567,10 +652,19 @@ export class AlternatingSequence extends Sequence {
 		return this;
 	}
 }
+funcs.AlternatingSequence = (...args)=>new AlternatingSequence(...args);
 
-export class Choice extends Container {
-	constructor(public normal, ...items) {
-		super(...items);
+
+export class Choice extends FakeSVG {
+	normal: number;
+	items: (FakeSVG | Terminal)[];
+	width: any;
+	height: any;
+	up: any;
+	down: any;
+	extraHeight = 0;
+	constructor(normal, ...items) {
+		super('g');
 		if( typeof normal !== "number" || normal !== Math.floor(normal) ) {
 			throw new TypeError("The first argument of Choice() must be an integer.");
 		} else if(normal < 0 || normal >= items.length) {
@@ -580,6 +674,7 @@ export class Choice extends Container {
 		}
 		var first = 0;
 		var last = items.length - 1;
+		this.items = items.map(wrapString);
 		this.width = Math.max.apply(null, this.items.map(function(el){return el.width})) + Options.AR*4;
 		this.height = this.items[normal].height;
 		this.up = this.items[first].up;
@@ -601,7 +696,7 @@ export class Choice extends Container {
 			this.attrs['data-type'] = "choice";
 		}
 	}
-	format(x,y,width) {
+	format(x?,y?,width?) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
@@ -620,12 +715,12 @@ export class Choice extends Container {
 			}
 			new Path(x,y)
 				.arc('se')
-				.up(distanceFromY - Options.AR*2)
+				.upFn(distanceFromY - Options.AR*2)
 				.arc('wn').addTo(this);
 			item.format(x+Options.AR*2,y - distanceFromY,innerWidth).addTo(this);
 			new Path(x+Options.AR*2+innerWidth, y-distanceFromY+item.height)
 				.arc('ne')
-				.down(distanceFromY - item.height + this.height - Options.AR*2)
+				.downFn(distanceFromY - item.height + this.height - Options.AR*2)
 				.arc('ws').addTo(this);
 			distanceFromY += Math.max(Options.AR, item.up + Options.VS + (i === 0 ? 0 : this.items[i-1].down+this.items[i-1].height));
 		}
@@ -643,32 +738,54 @@ export class Choice extends Container {
 			}
 			new Path(x,y)
 				.arc('ne')
-				.down(distanceFromY - Options.AR*2)
+				.downFn(distanceFromY - Options.AR*2)
 				.arc('ws').addTo(this);
 			item.format(x+Options.AR*2, y+distanceFromY, innerWidth).addTo(this);
-			new Path(x+Options.AR*2+innerWidth, y+distanceFromY+item.height)
+			let lastNode = item;
+			if (item instanceof Sequence
+					|| item instanceof Stack
+					|| item instanceof OptionalSequence
+					|| item instanceof AlternatingSequence
+				) {
+				lastNode = item.items[item.items.length-1];
+				if (item instanceof Stack)
+					this.extraHeight = 40 * item.items.length; // there is a defect with diagram viewbox height for Choice/Stack combo
+			}
+			if (lastNode instanceof End && !lastNode.joinEol) {
+				// skip join with main line
+			} else {
+				new Path(x+Options.AR*2+innerWidth, y+distanceFromY+item.height)
 				.arc('se')
-				.up(distanceFromY - Options.AR*2 + item.height - this.height)
+				.upFn(distanceFromY - Options.AR*2 + item.height - this.height)
 				.arc('wn').addTo(this);
+			}
 			distanceFromY += Math.max(Options.AR, item.height + item.down + Options.VS + (i == last ? 0 : this.items[i+1].up));
 		}
 
 		return this;
 	}
 }
+funcs.Choice = (n,...args)=>new Choice(n,...args);
 
-export class HorizontalChoice extends Sequence {
-  _lowerTrack: number;
-  _upperTrack: number;
 
+export class HorizontalChoice extends FakeSVG {
+	items: (FakeSVG | Sequence | Terminal)[];
+	needsSpace: boolean;
+	width: number;
+	height: number;
+	_upperTrack: number;
+	up: number;
+	_lowerTrack: number;
+	down: number;
 	constructor(...items) {
-		super(...items);
+		super('g');
 		if( items.length === 0 ) {
 			throw new RangeError("HorizontalChoice() must have at least one child.");
 		}
 		if( items.length === 1) {
-			return;
+			items.push(new Skip());
 		}
+		this.items = items.map(wrapString);
 		const allButLast = this.items.slice(0, -1);
 		const middles = this.items.slice(1, -1);
 		const first = this.items[0];
@@ -711,9 +828,7 @@ export class HorizontalChoice extends Sequence {
 			this.attrs['data-type'] = "horizontalchoice";
 		}
 	}
-	format(x,y,width) {
-    if( this.items.length === 1) 
-      return super.format(x, y, width);
+	format(x?,y?,width?) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
@@ -754,7 +869,7 @@ export class HorizontalChoice extends Sequence {
 		// Items
 		// for(const [i, item] of enumerate(this.items)) {
 		for (let i = 0; i < this.items.length; i++) {
-      const item = this.items[i];
+			const item = this.items[i];
 			// input track
 			if(i === 0) {
 				new Path(x,y)
@@ -812,12 +927,21 @@ export class HorizontalChoice extends Sequence {
 		return this;
 	}
 }
+funcs.HorizontalChoice = (...args)=>new HorizontalChoice(...args);
 
-export class MultipleChoice extends Container {
-  innerWidth: number;
 
-	constructor(public normal, public type, ...items) {
-		super(...items);
+export class MultipleChoice extends FakeSVG {
+	normal: number;
+	type: any;
+	needsSpace: boolean;
+	items: (FakeSVG | Terminal)[];
+	innerWidth: any;
+	width: any;
+	up: any;
+	down: any;
+	height: any;
+	constructor(normal, type, ...items) {
+		super('g');
 		if( typeof normal !== "number" || normal !== Math.floor(normal) ) {
 			throw new TypeError("The first argument of MultipleChoice() must be an integer.");
 		} else if(normal < 0 || normal >= items.length) {
@@ -830,6 +954,8 @@ export class MultipleChoice extends Container {
 		} else {
 			this.type = type;
 		}
+		this.needsSpace = true;
+		this.items = items.map(wrapString);
 		this.innerWidth = max(this.items, function(x){return x.width});
 		this.width = 30 + Options.AR + this.innerWidth + Options.AR + 20;
 		this.up = this.items[0].up;
@@ -852,7 +978,7 @@ export class MultipleChoice extends Container {
 			this.attrs['data-type'] = "multiplechoice";
 		}
 	}
-	format(x, y, width) {
+	format(x?, y?, width?) {
 		var gaps = determineGaps(width, this.width);
 		new Path(x, y).right(gaps[0]).addTo(this);
 		new Path(x + gaps[0] + this.width, y + this.height).right(gaps[1]).addTo(this);
@@ -868,12 +994,12 @@ export class MultipleChoice extends Container {
 				distanceFromY = Math.max(10 + Options.AR, normal.up + Options.VS + item.down + item.height);
 			}
 			new Path(x + 30,y)
-				.up(distanceFromY - Options.AR)
+				.upFn(distanceFromY - Options.AR)
 				.arc('wn').addTo(this);
 			item.format(x + 30 + Options.AR, y - distanceFromY, this.innerWidth).addTo(this);
 			new Path(x + 30 + Options.AR + this.innerWidth, y - distanceFromY + item.height)
 				.arc('ne')
-				.down(distanceFromY - item.height + this.height - Options.AR - 10)
+				.downFn(distanceFromY - item.height + this.height - Options.AR - 10)
 				.addTo(this);
 			if(i !== 0) {
 				distanceFromY += Math.max(Options.AR, item.up + Options.VS + this.items[i-1].down + this.items[i-1].height);
@@ -890,19 +1016,19 @@ export class MultipleChoice extends Container {
 				distanceFromY = Math.max(10+Options.AR, normal.height + normal.down + Options.VS + item.up);
 			}
 			new Path(x + 30, y)
-				.down(distanceFromY - Options.AR)
+				.downFn(distanceFromY - Options.AR)
 				.arc('ws')
 				.addTo(this);
 			item.format(x + 30 + Options.AR, y + distanceFromY, this.innerWidth).addTo(this);
 			new Path(x + 30 + Options.AR + this.innerWidth, y + distanceFromY + item.height)
 				.arc('se')
-				.up(distanceFromY - Options.AR + item.height - normal.height)
+				.upFn(distanceFromY - Options.AR + item.height - normal.height)
 				.addTo(this);
 			if(i != this.items.length - 1) {
 				distanceFromY += Math.max(Options.AR, item.height + item.down + Options.VS + this.items[i+1].up);
 			}
 		}
-    var text = new FakeSVG('g', {"class": "diagram-text"}).addTo(this);
+		var text = new FakeSVG('g', {"class": "diagram-text"}).addTo(this);
 		new FakeSVG('title', {}, (this.type=="any"?"take one or more branches, once each, in any order":"take all branches, once each, in any order")).addTo(text);
 		new FakeSVG('path', {
 			"d": "M "+(x+30)+" "+(y-10)+" h -26 a 4 4 0 0 0 -4 4 v 12 a 4 4 0 0 0 4 4 h 26 z",
@@ -924,23 +1050,35 @@ export class MultipleChoice extends Container {
 		return this;
 	}
 }
+funcs.MultipleChoice = (n, t, ...args)=>new MultipleChoice(n, t, ...args);
 
+
+// export class Optional extends FakeSVG {
 export class Optional extends Choice {
 	constructor(item, skip) {
-		if( skip === undefined )
-			super(1, new Skip(), item);
-		else if ( skip === "skip" )
-			super(0, new Skip(), item);
-		else
-			throw "Unknown value for Optional()'s 'skip' argument.";
+		super(skip === undefined ? 1: 0, new Skip(), item);
+		// if( skip === undefined )
+		// 	return new Choice(1, new Skip(), item);
+		// else if ( skip === "skip" )
+		// 	return new Choice(0, new Skip(), item);
+		// else
+		// 	throw "Unknown value for Optional()'s 'skip' argument.";
 	}
 }
+funcs.Optional = (item, skip)=>new Optional(item, skip);
 
-export class OneOrMore extends Container {
-  item: any;
-  rep: any;
-	constructor(item, rep) {
-		super([]);
+
+export class OneOrMore extends FakeSVG {
+	item: FakeSVG | Terminal;
+	rep: FakeSVG | Terminal;
+	width: number;
+	height: any;
+	up: any;
+	down: number;
+	needsSpace: boolean;
+	showArrow: boolean;
+	constructor(item, rep, showArrow=false) {
+		super('g');
 		rep = rep || (new Skip());
 		this.item = wrapString(item);
 		this.rep = wrapString(rep);
@@ -948,12 +1086,14 @@ export class OneOrMore extends Container {
 		this.height = this.item.height;
 		this.up = this.item.up;
 		this.down = Math.max(Options.AR*2, this.item.down + Options.VS + this.rep.up + this.rep.height + this.rep.down);
+		this.needsSpace = true;
+		this.showArrow = showArrow;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "oneormore";
 		}
 	}
-	format(x,y,width) {
+	format(x?,y?,width?) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
@@ -967,52 +1107,325 @@ export class OneOrMore extends Container {
 
 		// Draw repeat arc
 		var distanceFromY = Math.max(Options.AR*2, this.item.height+this.item.down+Options.VS+this.rep.up);
-		new Path(x+Options.AR,y).arc('nw').down(distanceFromY-Options.AR*2).arc('ws').addTo(this);
+		new Path(x+Options.AR,y).arc('nw').downFn(distanceFromY-Options.AR*2).arc('ws').addTo(this);
 		this.rep.format(x+Options.AR, y+distanceFromY, this.width - Options.AR*2).addTo(this);
-		new Path(x+this.width-Options.AR, y+distanceFromY+this.rep.height).arc('se').up(distanceFromY-Options.AR*2+this.rep.height-this.item.height).arc('en').addTo(this);
+		new Path(x+this.width-Options.AR, y+distanceFromY+this.rep.height).arc('se').upFn(distanceFromY-Options.AR*2+this.rep.height-this.item.height).arc('en').addTo(this);
+
+		if (this.showArrow) {
+			var arrowSize = Options.AR/2;
+			// Compensate for the illusion that makes the arrow look unbalanced if it's too close to the curve below it
+			var multiplier = (distanceFromY < arrowSize*5) ? 1.2 : 1;
+			new Path(x-arrowSize, y+distanceFromY/2 + arrowSize/2 /*, {class:"arrow"} */).
+				l(arrowSize, -arrowSize).l(arrowSize*multiplier, arrowSize).addTo(this);
+		}
 
 		return this;
 	}
 }
+funcs.OneOrMore = (item, rep)=>new OneOrMore(item, rep);
 
+
+// export class ZeroOrMore extends FakeSVG {
 export class ZeroOrMore extends Optional {
 	constructor(item, rep, skip) {
 		super(new OneOrMore(item, rep), skip);
+		// return new Optional(new OneOrMore(item, rep), skip);
 	}
 }
+funcs.ZeroOrMore = (item, rep, skip)=>new ZeroOrMore(item, rep, skip);
 
-class Control extends Component {
+
+export class Start extends FakeSVG {
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	type: string;
+	label: string;
+	title: string;
+	href: string;
+	joinSol: boolean;
+	constructor({type="simple", label=undefined, href=undefined, joinSol=false}={}) {
+		super('g');
+		this.width = 20;
+		this.height = 0;
+		this.up = 10;
+		this.down = 10;
+		this.type = type;
+		this.href = href;
+		this.joinSol = joinSol; 
+		if(label) {
+			this.label = ""+label;
+			this.width = Math.max(20, this.label.length * Options.CHAR_WIDTH + 10);
+		}
+		if(Options.DEBUG) {
+			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
+			this.attrs['data-type'] = "start";
+		}
+	}
+	format(x?,y?) {
+		let path = new Path(x, y-10);
+		if (this.type === "complex") {
+			path.downFn(20)
+				.m(0, -10)
+				.right(this.width)
+				.addTo(this);
+		} else {
+			path.downFn(20)
+				.m(10, -20)
+				.downFn(20)
+				.m(-10, -10)
+				.right(this.width)
+				.addTo(this);
+		}
+		if(this.label) {
+			var text = new FakeSVG('text', {x:x, y:y-15, style:"text-anchor:start"}, this.label).addTo(this);
+			if(this.href)
+				new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
+			else
+				text.addTo(this);
+			if(this.title)
+				new FakeSVG('title', {}, []).addTo(this);
+		}
+		return this;
+	}
 }
+funcs.Start = (...args)=>new Start(...args);
 
-export class Skip extends Control {
+
+export class End extends FakeSVG {
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	type: string;
+	label: string;
+	title: string;
+	href: string;
+	joinEol: boolean;
+	constructor({type="simple", label=undefined, href=undefined, joinEol=false}={}) {
+		super('g');
+		this.width = 20;
+		this.height = 0;
+		this.up = 10;
+		this.down = 10;
+		this.type = type;
+		this.label = label;
+		this.href = href;
+		this.joinEol = joinEol;
+		if(Options.DEBUG) {
+			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
+			this.attrs['data-type'] = "end";
+		}
+	}
+	format(x?,y?) {
+		let path = new Path(x, y-10);
+		if (this.type === "complex") {
+			path.downFn(20)
+				.m(0, -10)
+				.right(this.width)
+				.addTo(this);
+		} else {
+			path.downFn(20)
+				.m(10, -20)
+				.downFn(20)
+				.m(-10, -10)
+				.right(this.width)
+				.addTo(this);
+		}
+		if(this.label) {
+			var text = new FakeSVG('text', {x:x, y:y-15, style:"text-anchor:start"}, this.label).addTo(this);
+			if(this.href)
+				new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
+			else
+				text.addTo(this);
+			if(this.title)
+				new FakeSVG('title', {}, []).addTo(this);
+		}
+		return this;
+	} 
+}
+funcs.End = (...args)=>new End(...args);
+
+export class Terminal extends FakeSVG {
+	text: string;
+	href: any;
+	title: any;
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	needsSpace: boolean;
+	constructor(text: string, {href=undefined, title=undefined}={}) {
+		super('g', {'class': 'terminal'});
+		this.text = ""+text;
+		this.href = href;
+		this.title = title;
+		this.width = this.text.length * Options.CHAR_WIDTH + 20; /* Assume that each char is .5em, and that the em is 16px */
+		this.height = 0;
+		this.up = 11;
+		this.down = 11;
+		this.needsSpace = true;
+		if(Options.DEBUG) {
+			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
+			this.attrs['data-type'] = "terminal";
+		}
+	}
+	format(x?, y?, width?) {
+		// Hook up the two sides if this is narrower than its stated width.
+		var gaps = determineGaps(width, this.width);
+		new Path(x,y).h(gaps[0]).addTo(this);
+		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
+		x += gaps[0];
+
+		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down, rx:10, ry:10}).addTo(this);
+		var text = new FakeSVG('text', {x:x+this.width/2, y:y+4}, this.text);
+		if(this.href)
+			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
+		else
+			text.addTo(this);
+		if(this.title)
+			new FakeSVG('title', {}, [this.title]).addTo(this);
+		return this;
+	}
+}
+funcs.Terminal = (t, o)=>new Terminal(t, o);
+
+
+export class NonTerminal extends FakeSVG {
+	text: string;
+	href: any;
+	title: any;
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	needsSpace: boolean;
+	constructor(text, {href=undefined, title=undefined}={}) {
+		super('g', {'class': 'non-terminal'});
+		this.text = ""+text;
+		this.href = href;
+		this.title = title;
+		this.width = this.text.length * Options.CHAR_WIDTH + 20;
+		this.height = 0;
+		this.up = 11;
+		this.down = 11;
+		this.needsSpace = true;
+		if(Options.DEBUG) {
+			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
+			this.attrs['data-type'] = "nonterminal";
+		}
+	}
+	format(x?, y?, width?) {
+		// Hook up the two sides if this is narrower than its stated width.
+		var gaps = determineGaps(width, this.width);
+		new Path(x,y).h(gaps[0]).addTo(this);
+		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
+		x += gaps[0];
+
+		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down}).addTo(this);
+		var text = new FakeSVG('text', {x:x+this.width/2, y:y+4}, this.text);
+		if(this.href)
+			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
+		else
+			text.addTo(this);
+		if(this.title)
+			new FakeSVG('title', {}, [this.title]).addTo(this);
+		return this;
+	}
+}
+funcs.NonTerminal = (t, o)=>new NonTerminal(t, o);
+
+
+export class Comment extends FakeSVG {
+	text: string;
+	href: any;
+	title: any;
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	needsSpace: boolean;
+	constructor(text, {href=undefined, title=undefined}={}) {
+		super('g');
+		this.text = ""+text;
+		this.href = href;
+		this.title = title;
+		this.width = this.text.length * Options.COMMENT_CHAR_WIDTH + 10;
+		this.height = 0;
+		this.up = 11;
+		this.down = 11;
+		this.needsSpace = true;
+		if(Options.DEBUG) {
+			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
+			this.attrs['data-type'] = "comment";
+		}
+	}
+	format(x?, y?, width?) {
+		// Hook up the two sides if this is narrower than its stated width.
+		var gaps = determineGaps(width, this.width);
+		new Path(x,y).h(gaps[0]).addTo(this);
+		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		x += gaps[0];
+
+		var text = new FakeSVG('text', {x:x+this.width/2, y:y+5, class:'comment'}, this.text);
+		if(this.href)
+			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
+		else
+			text.addTo(this);
+		if(this.title)
+			new FakeSVG('title', {}, this.title).addTo(this);
+		return this;
+	}
+}
+funcs.Comment = (t, o)=>new Comment(t, o);
+
+
+export class Skip extends FakeSVG {
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	needsSpace: boolean;
 	constructor() {
-		super();
+		super('g');
+		this.width = 0;
+		this.height = 0;
+		this.up = 0;
+		this.down = 0;
 		this.needsSpace = false;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "skip";
 		}
 	}
-	format(x, y, width) {
+	format(x?, y?, width?) {
 		new Path(x,y).right(width).addTo(this);
 		return this;
 	}
 }
+funcs.Skip = ()=>new Skip();
 
-export class Block extends Control {
-	constructor(width=50, up=15, height=25, down=15, needsSpace=true) {
-		super();
+
+export class Block extends FakeSVG {
+	width: number;
+	height: number;
+	up: number;
+	down: number;
+	needsSpace: boolean;
+	constructor({width=50, up=15, height=25, down=15, needsSpace=true}={}) {
+		super('g');
 		this.width = width;
 		this.height = height;
 		this.up = up;
 		this.down = down;
-		this.needsSpace = needsSpace;
+		this.needsSpace = true;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "block";
 		}
 	}
-	format(x, y, width) {
+	format(x?, y?, width?) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
@@ -1023,194 +1436,8 @@ export class Block extends Control {
 		return this;
 	}
 }
+funcs.Block = (...args)=>new Block(...args);
 
-class TextControl extends Control {
-  label: string;
-  href: string;
-  title: string;
-
-  constructor(label?, href?, title?) {
-    super();
-    this.label = label;
-    this.href = href;
-    this.title = title;
-  }
-}
-
-class Terminus extends TextControl {
-  type: string;
-
-  constructor(type, label, href, title) {
-		super(label, href, title);
-		this.width = 20;
-		this.height = 0;
-		this.up = 10;
-		this.down = 10;
-    this.type = type;
-		if(label) {
-			this.label = ""+label;
-			this.width = Math.max(20, this.label.length * Options.CHAR_WIDTH + 10);
-		}
-  }
-
-	format(x,y) {
-		if(this.label) {
-			new FakeSVG('text', {x:x, y:y-15, style:"text-anchor:start"}, this.label).addTo(this);
-		}
-  }
-}
-
-export class Start extends Terminus {
-  constructor(type="simple", label=undefined, href=undefined, title=undefined) {
-		super(type, label, href, title);
-		if(Options.DEBUG) {
-			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
-			this.attrs['data-type'] = "start";
-		}
-	}
-	format(x,y) {
-		let path = new Path(x, y-10);
-		if (this.type === "complex") {
-			path.down(20)
-				.m(0, -10)
-				.right(this.width)
-				.addTo(this);
-		} else {
-			path.down(20)
-				.m(10, -20)
-				.down(20)
-				.m(-10, -10)
-				.right(this.width)
-				.addTo(this);
-		}
-    super.format(x, y);
-    return this;
-	}
-}
-
-export class End extends Terminus {
-  type: string;
-
-  constructor(type="simple", label=undefined, href=undefined, title=undefined) {
-		super(type, label, href, title);
-		this.tagName = 'path';
-		if(Options.DEBUG) {
-			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
-			this.attrs['data-type'] = "end";
-		}
-	}
-	format(x,y) {
-		if (this.type === "complex") {
-			this.attrs.d = 'M '+x+' '+y+' h 20 m 0 -10 v 20';
-		} else {
-			this.attrs.d = 'M '+x+' '+y+' h 20 m -10 -10 v 20 m 10 -20 v 20';
-    }
-    super.format(x, y);
-		return this;
-	}
-}
-
-export class Terminal extends TextControl {
-	constructor(label, href?, title?) {
-    super(label, href, title);
-		this.attrs = unnull({'class': 'terminal'}, {});
-
-		this.label = ""+label;
-		this.width = this.label.length * Options.CHAR_WIDTH + 20; /* Assume that each char is .5em, and that the em is 16px */
-		this.height = 0;
-		this.up = 11;
-		this.down = 11;
-		if(Options.DEBUG) {
-			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
-			this.attrs['data-type'] = "terminal";
-		}
-	}
-	format(x, y, width) {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
-		x += gaps[0];
-
-		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down, rx:10, ry:10}).addTo(this);
-		var text = new FakeSVG('text', {x:x+this.width/2, y:y+4}, this.label);
-		if(this.href)
-			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
-			text.addTo(this);
-		if(this.title)
-			new FakeSVG('title', {}, [this.title]).addTo(this);
-		return this;
-	}
-}
-
-export class NonTerminal extends TextControl {
-	constructor(label, href?, title?) {
-    super(label, href, title);
-		this.attrs = unnull({'class': 'non-terminal'}, {});
-
-		this.label = ""+label;
-		this.width = this.label.length * Options.CHAR_WIDTH + 20;
-		this.height = 0;
-		this.up = 11;
-		this.down = 11;
-		if(Options.DEBUG) {
-			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
-			this.attrs['data-type'] = "nonterminal";
-		}
-	}
-	format(x, y, width) {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
-		x += gaps[0];
-
-		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down}).addTo(this);
-		var text = new FakeSVG('text', {x:x+this.width/2, y:y+4}, this.label);
-		if(this.href)
-			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
-			text.addTo(this);
-		if(this.title)
-			new FakeSVG('title', {}, [this.title]).addTo(this);
-		return this;
-	}
-}
-
-export class Comment extends TextControl {
-	constructor(label, href?, title?) {
-    super(label, href, title);
-		this.label = ""+label;
-		this.width = this.label.length * Options.COMMENT_CHAR_WIDTH + 10;
-		this.height = 0;
-		this.up = 11;
-		this.down = 11;
-		if(Options.DEBUG) {
-			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
-			this.attrs['data-type'] = "comment";
-		}
-	}
-	format(x, y, width) {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
-		x += gaps[0];
-
-		var text = new FakeSVG('text', {x:x+this.width/2, y:y+5, class:'comment'}, this.label);
-		if(this.href)
-			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
-			text.addTo(this);
-		if(this.title)
-			new FakeSVG('title', {}, this.title).addTo(this);
-		return this;
-	}
-}
-
-
-// utilities
 
 function unnull(...args) {
 	// Return the first value that isn't undefined.
@@ -1241,7 +1468,7 @@ function max(iter, func) {
 	return Math.max.apply(null, iter.map(func));
 }
 
-function SVG(name, attrs, text?) {
+function SVG(name, attrs?: object, text?: string) {
 	attrs = attrs || {};
 	text = text || '';
 	var el = document.createElementNS("http://www.w3.org/2000/svg",name);

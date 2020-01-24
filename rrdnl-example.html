@@ -15,7 +15,6 @@ script {
 <script src='./out/rrdnl-bundle.js'></script>
 <body>
 	
-	
 <h1 id=seq_grp>Sequence Group</h1>
 <h2 id=seq_imp>Implicit Sequence Notation</h2>
 <script>
@@ -114,9 +113,9 @@ let or_ex6 = `{x|y z}`;
 new DiagramParser(or_ex6).parse().addTo();
 </script>
 
-<h2 id=or_c1>Optional/Repeat combo standard Notation</h2>
+<h2 id=or_c1>Optional/Repeat combo w\ arrow Notation</h2>
 <script>
-let or_ex7 = `[{x y}]`;
+let or_ex7 = `[{:x y}]`;
 new DiagramParser(or_ex7).parse().addTo();
 </script>
 
@@ -164,50 +163,53 @@ let c_ex5 = `/"Terminal name here."/`;
 new DiagramParser(c_ex5).parse().addTo();
 </script>
 
+
 <h2 id=c_nt4>Comment w/ URL and escaping Notation</h2>
 <script>
-let c_ex6 = `/"terminal name w\\"/ URL|http://google.com"/`;
+let c_ex6 = `/"terminal I\\O \\"/ URL|http://google.com"/`;
 new DiagramParser(c_ex6).parse().addTo();
 </script>
 
-
 <h1 id=aux_grp>Auxilary Group</h1>
-
 <h2 id=aux_a1>Start standard Notation</h2>
+
+	
 <script>
-	let a_ex7 = `=[|=`;
+	let a_ex7 = `=[= x y`;
 	new DiagramParser(a_ex7).parse().addTo();
-</script>
+</script> 
 
 <h2 id=aux_a2>Start complex w\ join to SOL Notation</h2>
 <script>
-	let a_ex8 = `+=[|=`;
+	let a_ex8 = `+=[|= x y`;
 	new DiagramParser(a_ex8).parse().addTo();
 </script>
- 
+
 <h2 id=aux_a3>Start w\ join to SOL text, URL and simple Notation</h2>
 <script>
-	let a_ex9 = `+=[Go|http:\\google.com=`;
+	let a_ex9 = `+=[Go|http:\\google.com= x y`;
 	new DiagramParser(a_ex9).parse().addTo();
 </script>
 
 <h2 id=aux_a4>End standard Notation</h2>
 <script>
-	let a_ex10 = `=|]=`;
+	let a_ex10 = `x y =]=`;
 	new DiagramParser(a_ex10).parse().addTo();
 </script>
 
-<h2 id=aux_a5>End complex w\ join to SOL Notation</h2>
+
+<h2 id=aux_a5>End complex w\o join to EOL Notation</h2>
 <script>
-	let a_ex11 = `=|]=+`;
+	let a_ex11 = `a (?b|c d =]=?) e f`;
 	new DiagramParser(a_ex11).parse().addTo();
 </script>
 
-<h2 id=aux_a6>End w\ join to SOL text, URL and simple Notation</h2>
+<h2 id=aux_a6>End w\ join to EOL text, URL and simple Notation</h2>
 <script>
-	let a_ex12 = `=Go|http:\\google.com]=+`;
+	let a_ex12 = `x y =Go|http:\\google.com|]=+`;
 	new DiagramParser(a_ex12).parse().addTo();
 </script> 
+
 
 <h2 id=aux_a7>Skip past</h2>
 <script>
@@ -242,5 +244,6 @@ new DiagramParser(c_ex6).parse().addTo();
 	document.write(`<code>` + d_ex16.prepareTroubleshootingHint() + `</code>`);
 	rslt_ex16.addTo();
 </script>
+
 
 </body>
