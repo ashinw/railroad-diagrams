@@ -33,26 +33,25 @@ x y z			    implicit sequence
 "x" can also be written 'x' or """x"""
 
 pragmas:
+	@cpt 				creates a concept diagram (ie.No rules around start|end) rather that the Railroad diagram
 	@dbg				toggle
 	@esc<char>	set character
-	@arw				toggle
  */
-
-// const funcs = {};
 
 import {
 	Options,
-	Diagram, ComplexDiagram,
+	Diagramable, Diagram, ConceptDiagram,
 	Sequence, Stack, OptionalSequence, AlternatingSequence,
 	Choice, HorizontalChoice, MultipleChoice,
 	Optional, OneOrMore, ZeroOrMore,
-	Start, End, Terminal, NonTerminal, Comment, Skip, Block
-} from './railroad';
+	Start, End, Terminal, NonTerminal, Comment, Skip, Block, Component
+} from './railroad.js';
 
 export class DiagramParser {
 	context = new ParserReadContext();
 	parsers = new Array<ComponentParser>();
 	tokenStack = [];
+	targetConceptDiagram = false;
 
 	constructor(src: string) {
 		this.context.source = src.trim();
@@ -60,14 +59,16 @@ export class DiagramParser {
 		this.reorderParsers();
 	}
 
-	parse(): any {
+	parse(): Diagramable {
 		let items = [];
 		while (this.context.hasMore()) {
 			let item = this.parseNextComponent(undefined);
-			items.push(item);
+			if (item)
+				items.push(item);
 			this.context.skipWhitespace();
 		}
-		return new Diagram(...items);
+		let diag = this.targetConceptDiagram ? new ConceptDiagram(...items): new Diagram(...items);
+		return diag;
 	}
 
 	parseNextComponent(callerState: ParserState): any[] {
@@ -77,12 +78,10 @@ export class DiagramParser {
 	}
 
 	getParser(callerState: ParserState): ParserState {
-		console.log(`1. [${callerState ? callerState.operationName : 'Diagram'}] seeking parser for -->${this.context.source.substr(this.context.pos, 2)}<--`);
 		for (let i = 0; i < this.parsers.length; i++) {
 			const parser = this.parsers[i];
 			let state = parser.canParse();
 			if (state) {
-				console.log(`2. Found parser for -->${state.openSyntax}<- ${state.operationName}`);
 				return state;
 			}
 		}
@@ -121,6 +120,7 @@ export class DiagramParser {
 		this.registerParser(new StartParser(this));
 		this.registerParser(new EndParser(this));
 		this.registerParser(new SkipParser(this));
+		this.registerParser(new BlockParser(this));
 		this.registerParser(new PragmaParser(this));
 	}
 
@@ -131,6 +131,8 @@ export class DiagramParser {
 	protected reorderParsers() {
 	}
 }
+
+export default DiagramParser;
 
 class ParserReadContext {
 	// Pragmas
@@ -146,13 +148,11 @@ class ParserReadContext {
 
 	readIn(len: number): number {
 		this.pos += len;
-		console.log(`\tParserReadContext::readIn len:${len}, this.pos: ${this.pos}, 1st5-> ${this.source.substr(this.pos, 5)}`);
 		return this.pos;
 	}
 
 	skipTo(newPos: number): string {
 		let ret = this.source.substr(this.pos, newPos - this.pos);
-		console.log(`\tParserReadContext::skipTo newPos ${newPos} skipped-over: ${ret}`);
 		this.readIn(newPos - this.pos);
 		return ret;
 	}
@@ -160,7 +160,6 @@ class ParserReadContext {
 	skipWhitespace(): number {
 		let match = this.source.substr(this.pos).match(/\S/);
 		if (match && match.index > 0) {
-			console.log(`\tParserReadContext::skipWhitespace match.index ${match.index}`);
 			this.readIn(match.index)
 		}
 		return this.pos;
@@ -189,15 +188,12 @@ class ParserReadContext {
 			if (match)
 				ret = match[0];
 		}
-		if (ret)
-			console.log(`\tParserReadContext::hasSignature (${regOrStr}) matched with -->${ret}<--`);
 		return ret;
 	}
 
 	// escapedIndexOf(criteria: string, countAhead: number): number {
 	// 	let startFrom = this.pos + countAhead;
 	// 	let ret = this.escapedStringIndexOf(this.source, criteria, startFrom);
-	// 	console.log(`\tParserReadContext::escapedIndexOf ret = ${ret}`);
 	// 	return ret;
 	// }
 
@@ -212,7 +208,6 @@ class ParserReadContext {
 			}
 			startFrom = foundPos + 1;
 		}
-		console.log(`\tParserReadContext::escapedStringIndexOf foundPos = ${foundPos} -> crit: ${criteria}`);
 		return foundPos;
 	}
 
@@ -220,11 +215,14 @@ class ParserReadContext {
 		let foundPos = -1;
 		let match = undefined;
 		while (true) {
-			criteria.lastIndex = startFrom;
-			match = src.match(criteria);
-			if (match && match.index)
-				foundPos = match.index;
-			else
+			// criteria.lastIndex = startFrom;
+			// match = src.match(criteria);
+			criteria.lastIndex = 0;
+			let remainder = src.substr(startFrom);
+			match = remainder.match(criteria);
+			if (match && match.index >=0) {
+				foundPos = startFrom + match.index;
+			} else
 				foundPos = -1;
 			if (foundPos === -1)
 				break;
@@ -234,7 +232,6 @@ class ParserReadContext {
 			startFrom = foundPos + 1;
 		}
 		storeMatch[0] = foundPos > -1 ? match[0] : undefined;
-		console.log(`\tParserReadContext::escapedRegExIndexOf foundPos = ${foundPos} -> crit: ${criteria}`);
 		return foundPos;
 	}
 
@@ -258,8 +255,8 @@ class ParserState {
 // Note: All parsers must be implemented to be stateless. 
 // Use ParserState for storage!
 abstract class ComponentParser {
-	ctx: ParserReadContext = this.container.context;
-	constructor(public container: DiagramParser) {
+	ctx: ParserReadContext = this.controller.context;
+	constructor(public controller: DiagramParser) {
 	}
 
 	abstract canParse(): ParserState;
@@ -286,8 +283,7 @@ abstract class TitleLinkComponentParser extends ComponentParser {
 	static DELIM = "|";
 
 	readUntilClosingToken(state: ParserState, useClosingRegEx?: RegExp): string[] {
-		console.log(`\tTitleLinkComponentParser::readUntilClosingToken::start`);
-		this.container.addToTokenisedStack(state);
+		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		let pos = -1;
 		if (useClosingRegEx) {
@@ -300,9 +296,7 @@ abstract class TitleLinkComponentParser extends ComponentParser {
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
 		let comment = this.ctx.skipTo(pos);
 		let ret = this.finaliseState(comment, state);
-		console.log(`3. title|link parsed as: ${ret[0]} | ${ret[1]}`);
 		this.ctx.readIn(state.closeSyntax.length);
-		console.log(`\tTitleLinkComponentParser::readUntilClosingToken::end`);
 		return ret;
 	}
 
@@ -341,9 +335,8 @@ class SequenceParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
-		console.log(`\tSequenceParser::parse::start`);
-		this.container.addToTokenisedStack(state);
+	parse(state: ParserState): Component {
+		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		state.attr.closed = false;
 		state.attr.type = SequenceParser.OPEN_LIST.indexOf(state.openSyntax);
@@ -355,17 +348,16 @@ class SequenceParser extends ComponentParser {
 				state.attr.closed = true;
 				break;
 			}
-			let items = this.container.parseNextComponent(state);
+			let items = this.controller.parseNextComponent(state);
 			state.items.push(items);
 			this.ctx.skipWhitespace();
 		}
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
-		console.log(`\tSequenceParser::parse::end`);
 		return this.constructModel(state);
 	}
 
-	private constructModel(state: ParserState) {
+	private constructModel(state: ParserState): Component {
 		let rrdType: any = undefined;
 		if (state.attr.type === 0)
 			rrdType = new Sequence(...state.items);
@@ -398,9 +390,8 @@ class ChoiceParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
-		console.log(`\tChoiceParser::parse::start`);
-		this.container.addToTokenisedStack(state);
+	parse(state: ParserState): Component {
+		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		state.attr.closed = false;
 		this.prepareInitialState(state);
@@ -421,14 +412,13 @@ class ChoiceParser extends ComponentParser {
 					this.handlePreferredOption(state);
 			}
 			if (!match) {
-				let item = this.container.parseNextComponent(state);
+				let item = this.controller.parseNextComponent(state);
 				state.items[state.attr.optionsCount - 1].push(item);
 			}
 			this.ctx.skipWhitespace();
 		}
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
-		console.log(`\tChoiceParser::parse::end`);
 		return this.constructModel(state);
 	}
 
@@ -444,7 +434,6 @@ class ChoiceParser extends ComponentParser {
 		if (state.attr.preferIndex > -1)
 			throw new Error(`Illegal argument: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} supports only 1 default preceding the option using ${ChoiceParser.PREFER_DELIM}`);
 		state.attr.preferIndex = state.attr.optionsCount - 1;
-		console.log(`\tChoiceParser::parse::preferIndex = ${state.attr.preferIndex}`);
 	}
 
 	private handleNextOption(state: ParserState) {
@@ -453,10 +442,9 @@ class ChoiceParser extends ComponentParser {
 			throw new Error(`Illegal argument:  ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} requires an option before/betweem ${ChoiceParser.OPTION_DELIM}`);
 		state.attr.optionsCount++;
 		state.items[state.attr.optionsCount - 1] = [];
-		console.log(`\tChoiceParser::parse::optionsCount = ${state.attr.optionsCount}`);
 	}
 
-	private constructModel(state: ParserState): any {
+	private constructModel(state: ParserState): Component {
 		let rrdType: any = undefined;
 		let normal = state.attr.preferIndex === -1 ? 0 : state.attr.preferIndex;
 		this.finaliseItemsForModel(state);
@@ -500,10 +488,9 @@ class CommentParser extends TitleLinkComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
+	parse(state: ParserState): Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		// let rrdType = new Comment(titleLinkArr[0], titleLinkArr[1]);
-		let rrdType = new Comment(titleLinkArr[0], { href: titleLinkArr[1] });
+		let rrdType = new Comment(titleLinkArr[0], undefined, titleLinkArr[1]);
 		return rrdType;
 	}
 }
@@ -520,10 +507,9 @@ class NonTerminalParser extends TitleLinkComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
+	parse(state: ParserState): Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		// let rrdType = new NonTerminal(titleLinkArr[0], titleLinkArr[1]);
-		let rrdType = new NonTerminal(titleLinkArr[0], { href: titleLinkArr[1] });
+		let rrdType = new NonTerminal(titleLinkArr[0], undefined, titleLinkArr[1]);
 		return rrdType;
 	}
 }
@@ -540,10 +526,9 @@ class TerminalParser extends TitleLinkComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
+	parse(state: ParserState): Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		// let rrdType = new Terminal(titleLinkArr[0], titleLinkArr[1]);
-		let rrdType = new Terminal(titleLinkArr[0], { href: titleLinkArr[1] });
+		let rrdType = new Terminal(titleLinkArr[0], undefined, titleLinkArr[1]);
 		return rrdType;
 	}
 }
@@ -560,12 +545,11 @@ export class StartParser extends TitleLinkComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): any {
+	parse(state: ParserState): Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		state.attr.joinSol = (state.openSyntax.charAt(0) === "+");
+		state.attr.connectToMainline = (state.openSyntax.charAt(0) === "+");
 		state.attr.type = state.openSyntax.endsWith("=[|") ? "simple" : "complex";
-		// let rrdType = new Terminal(titleLinkArr[0], titleLinkArr[1]);
-		let rrdType = new Start({ type: state.attr.type, label: titleLinkArr[0], href: titleLinkArr[1], joinSol: state.attr.joinSol });
+		let rrdType = new Start(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
 		return rrdType;
 	}
 }
@@ -582,12 +566,11 @@ export class EndParser extends TitleLinkComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): any {
+	parse(state: ParserState): Component {
 		let titleLinkArr = super.readUntilClosingToken(state, EndParser.REG_EX);
-		state.attr.joinEol = (state.closeSyntax.charAt(state.closeSyntax.length - 1) === "+");
+		state.attr.connectToMainline = (state.closeSyntax.charAt(state.closeSyntax.length - 1) === "+");
 		state.attr.type = state.closeSyntax.startsWith("|]=") ? "simple" : "complex";
-		// let rrdType = new Terminal(titleLinkArr[0], titleLinkArr[1]);
-		let rrdType = new End({ type: state.attr.type, label: titleLinkArr[0], href: titleLinkArr[1], joinEol: state.attr.joinEol });
+		let rrdType = new End(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
 		return rrdType;
 	}
 }
@@ -603,9 +586,27 @@ export class SkipParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): any {
+	parse(state: ParserState): Component {
 		this.ctx.readIn(SkipParser.OPEN.length);
 		return new Skip();
+	}
+}
+
+
+export class BlockParser extends ComponentParser {
+	static OPEN = "#"; // no close
+
+	canParse(): ParserState {
+		let state = undefined;
+		let match = this.ctx.hasSignature(BlockParser.OPEN);
+		if (match)
+			state = new ParserState(this, this.ctx.pos + match.length, match, undefined, "block parser");
+		return state;
+	}
+
+	parse(state: ParserState): Component {
+		this.ctx.readIn(BlockParser.OPEN.length);
+		return new Block();
 	}
 }
 
@@ -622,9 +623,8 @@ class LiteralNonTerminalParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): any {
-		console.log(`\tLiteralTerminalParser::parse::start`);
-		this.container.addToTokenisedStack(state);
+	parse(state: ParserState): Component {
+		this.controller.addToTokenisedStack(state);
 		let regEx = /([a-zA-Z0-9_.-]+)/g;
 		regEx.lastIndex = this.ctx.pos;
 		let match = regEx.exec(this.ctx.source);
@@ -633,10 +633,8 @@ class LiteralNonTerminalParser extends ComponentParser {
 			state.attr.name = this.ctx.source.substr(this.ctx.pos, match[1].length);
 			state.items.push(state.attr.name);
 			this.ctx.readIn(match[1].length);
-			console.log(`3. LiteralTerminalParser::parse::match -> ${state.items[0]}`);
 		} else
 			throw new Error(`Illegal argument: [a-zA-Z0-9_.-]...[a-zA-Z0-9_.-] - ${state.operationName} supports only standard characterset for naming`);
-		console.log(`\tLiteralTerminalParser::parse::end`);
 		let rrdType = new NonTerminal(state.attr.name);
 		return rrdType;
 	}
@@ -658,9 +656,8 @@ class OptionalParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
-		console.log(`\tOptionalParser::parse::start`);
-		this.container.addToTokenisedStack(state);
+	parse(state: ParserState): Component {
+		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		this.ctx.skipWhitespace();
 		state.attr.closed = false;
@@ -669,7 +666,6 @@ class OptionalParser extends ComponentParser {
 		if (match) {
 			state.attr.preferIndex = 1;
 			this.ctx.readIn(OptionalParser.PREFER_DELIM.length);
-			console.log(`\tOptionalParser::parse::preferIndex = ${state.attr.preferIndex}`);
 			this.ctx.skipWhitespace();
 		}
 		while (this.ctx.hasMore()) {
@@ -679,7 +675,7 @@ class OptionalParser extends ComponentParser {
 				state.attr.closed = true;
 				break;
 			}
-			let item = this.container.parseNextComponent(state);
+			let item = this.controller.parseNextComponent(state);
 			state.items.push(item);
 			this.ctx.skipWhitespace();
 		}
@@ -687,7 +683,6 @@ class OptionalParser extends ComponentParser {
 			throw new Error(`Invalid state: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} extended an operand`);
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.operationName, state.closeSyntax, state.operationName);
-		console.log(`\tOptionalParser::parse::end`);
 		let item = state.items.length === 1 ? state.items[0] : new Sequence(...state.items);
 		let rrdType = new Optional(item, state.attr.preferIndex === 0 ? "skip" : undefined);
 		return rrdType;
@@ -710,9 +705,8 @@ class RepeatParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): any {
-		console.log(`\tRepeatParser::parse::start`);
-		this.container.addToTokenisedStack(state);
+	parse(state: ParserState): Component {
+		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		this.ctx.skipWhitespace();
 		state.attr.closed = false;
@@ -723,7 +717,6 @@ class RepeatParser extends ComponentParser {
 		if (match) {
 			state.attr.showArrow = true;
 			this.ctx.readIn(OptionalParser.PREFER_DELIM.length);
-			console.log(`\tRepeatParser::parse::showArrow = ${state.attr.showArrow}`);
 			this.ctx.skipWhitespace();
 		}
 		while (this.ctx.hasMore()) {
@@ -737,7 +730,7 @@ class RepeatParser extends ComponentParser {
 			if (match) {
 				this.handleLowerDelimiter(state);
 			} else {
-				let item = this.container.parseNextComponent(state);
+				let item = this.controller.parseNextComponent(state);
 				state.items[state.attr.lowerIndex].push(item);
 			}
 			this.ctx.skipWhitespace();
@@ -746,11 +739,10 @@ class RepeatParser extends ComponentParser {
 			throw new Error(`Invalid state: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} extended an operand`);
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
-		console.log(`\tRepeatParser::parse::end`);
 		return this.constructModel(state);
 	}
 
-	private constructModel(state: ParserState) {
+	private constructModel(state: ParserState): Component {
 		let item = state.items[0].length === 1 ? state.items[0][0] : new Sequence(...state.items[0]);
 		let rep = undefined;
 		if (state.items[1].length === 1)
@@ -767,17 +759,16 @@ class RepeatParser extends ComponentParser {
 			throw new Error(`Illegal argument: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} supports only 1 lower caption delimiter per repeat loop using ${RepeatParser.LOWER_DELIM}`);
 		state.attr.lowerIndex++;
 		state.items[state.attr.lowerIndex] = [];
-		console.log(`\tRepeatParser::parse::lowerIndex = ${state.attr.lowerIndex}`);
 	}
 }
 
 /*
+@cpt 				creates a concept diagram (ie.No rules around start|end) rather that the Railroad diagram
 @dbg				toggle
 @esc<char>	set character
-@arw				toggle
 */
 class PragmaParser extends ComponentParser {
-	static REG_EX = /^@(dbg|esc.|arw)/;
+	static REG_EX = /^@(dbg|esc.|cpt)/;
 
 	canParse(): ParserState {
 		let state = undefined;
@@ -787,18 +778,18 @@ class PragmaParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): any {
-		console.log(`\tPragmaParser::parse::start`);
-		this.container.addToTokenisedStack(state);
+	parse(state: ParserState): Component {
+		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
-		if (state.openSyntax === "@dbg") {
+		if (state.openSyntax === "@cpt") {
+			this.controller.targetConceptDiagram = true;
+		} else if (state.openSyntax === "@dbg") {
 			Options.DEBUG = !Options.DEBUG;
 			state.attr.debug = Options.DEBUG;
 		} else if (state.openSyntax.startsWith("@esc")) {
 			this.ctx.escapeChar = this.ctx.source.charAt(this.ctx.pos - 1); // read ahead
 			state.attr.escapeChar = this.ctx.escapeChar;
 		}
-		console.log(`\tPragmaParser::parse::end`);
-		return state.items;
+		return undefined;
 	}
 }

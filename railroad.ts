@@ -16,6 +16,7 @@ I would appreciate attribution, but that is not required by the license.
 // Export function versions of all the constructors.
 // Each class will add itself to this object.
 const funcs = {
+	ConceptDiagram: undefined,
 	Diagram: undefined,
 	ComplexDiagram: undefined,
 	Sequence: undefined,
@@ -49,38 +50,36 @@ export const Options = {
 	COMMENT_CHAR_WIDTH: 7, // comments are in smaller text by default
 };
 
-
 export class FakeSVG {
 	children: any;
 	tagName: string;
 	attrs = {
 		d: "",
-		width: 0,
-		height: 0,
-		viewBox: "",
-		class: undefined,
 	};
-	up: number;
-	down: number;
-	height: number;
-	width: number;
-	needsSpace: boolean;
+	up: number						= 0;
+	down: number					= 0;
+	height: number				= 0;
+	width: number					= 0;
+	needsSpace: boolean		= true;
 
 	constructor(tagName: string, attrs?: object, text?: string|FakeSVG[]) {
-		if(text) this.children = text;
-		else this.children = [];
+		if (text) 
+			this.children = text;
+		else 
+			this.children = [];
 		this.tagName = tagName;
 		if (attrs)
-			this.attrs = {...this.attrs, ...attrs};
+			this.attrs = {...this.attrs, ...attrs};	// merge
 	}
 
 	format(): FakeSVG;
-	format(x?, y?, width?): FakeSVG;
+	format(x?: number,y?: number): FakeSVG;
+	format(x?: number,y?: number,width?: number): FakeSVG;
 	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
-			// Virtual
-		return undefined;
+			throw new Error("FakeSVG.format() is an overloaded method intended to be overridden by subclasses");
 	}
-	addTo(parent) {
+
+	addTo(parent:FakeSVG | Node): any {
 		if(parent instanceof FakeSVG) {
 			parent.children.push(this);
 			return this;
@@ -90,7 +89,8 @@ export class FakeSVG {
 			return svg;
 		}
 	}
-	toSVG() {
+
+	toSVG(): any {
 		var el = SVG(this.tagName, this.attrs);
 		if(typeof this.children == 'string') {
 			el.textContent = this.children;
@@ -101,7 +101,8 @@ export class FakeSVG {
 		}
 		return el;
 	}
-	toString() {
+
+	toString(): string {
 		var str = '<' + this.tagName;
 		var group = this.tagName == "g" || this.tagName == "svg";
 		for(var attr in this.attrs) {
@@ -121,29 +122,36 @@ export class FakeSVG {
 	}
 }
 
-
 export class Path extends FakeSVG {
-	constructor(x,y) {
+	constructor(x: number,y:number) {
 		super('path');
 		this.attrs.d = "M"+x+' '+y;
 	}
-	m(x,y) {
+	
+	m(x: number,y:number) {
 		this.attrs.d += 'm'+x+' '+y;
 		return this;
 	}
-	h(val) {
+	
+	h(val:number) {
 		this.attrs.d += 'h'+val;
 		return this;
 	}
-	right(val) { return this.h(Math.max(0, val)); }
-	left(val) { return this.h(-Math.max(0, val)); }
-	v(val) {
+	
+	right(val:number) { return this.h(Math.max(0, val)); }
+	
+	left(val:number) { return this.h(-Math.max(0, val)); }
+	
+	v(val:number) {
 		this.attrs.d += 'v'+val;
 		return this;
 	}
-	downFn(val) { return this.v(Math.max(0, val)); }
-	upFn(val) { return this.v(-Math.max(0, val)); }
-	arc(sweep){
+	
+	downFn(val:number) { return this.v(Math.max(0, val)); }
+	
+	upFn(val:number) { return this.v(-Math.max(0, val)); }
+
+	arc(sweep: string): Path {
 		// 1/4 of a circle
 		var x = Options.AR;
 		var y = Options.AR;
@@ -162,7 +170,8 @@ export class Path extends FakeSVG {
 		this.attrs.d += "a"+Options.AR+" "+Options.AR+" 0 0 "+cw+' '+x+' '+y;
 		return this;
 	}
-	arc_8(start, dir) {
+
+	arc_8(start: string, dir: string): Path {
 		// 1/8 of a circle
 		const arc = Options.AR;
 		const s2 = 1/Math.sqrt(2) * arc;
@@ -191,11 +200,13 @@ export class Path extends FakeSVG {
 		this.attrs.d += path;
 		return this;
 	}
-	l(x, y) {
+
+	l(x: number,y:number): Path {
 		this.attrs.d += 'l'+x+' '+y;
 		return this;
 	}
-	format() {
+
+	format(): Path {
 		// All paths in this library start/end horizontally.
 		// The extra .5 ensures a minor overlap, so there's no seams in bad rasterizers.
 		this.attrs.d += 'h.5';
@@ -203,20 +214,198 @@ export class Path extends FakeSVG {
 	}
 }
 
+class LruCache<K, T> {
+	private values: Map<K, T> = new Map<K, T>();
+	private maxEntries: number = 20;
 
-export class Diagram extends FakeSVG {
-	items: (FakeSVG | Terminal | Start | End)[];
-	formatted: boolean;
+	public get(key: K): T {
+		const hasKey = this.values.has(key);
+		let entry: T;
+		if (hasKey) {
+			entry = this.values.get(key);
+			this.values.delete(key);
+			this.values.set(key, entry);
+		}
+		return entry;
+	}
+
+	public put(key: K, value: T) {
+		if (this.values.size >= this.maxEntries) {
+			const keyToDelete = this.values.keys().next().value;
+			this.values.delete(keyToDelete);
+		}
+		this.values.set(key, value);
+	}
+}	
+
+export abstract class Component extends FakeSVG {
+	private static CONNECTION_UPLINE_CACHE = new LruCache<Component, boolean>();
+	private static CONNECTION_DNLINE_CACHE = new LruCache<Component, boolean>();
+	private static SAVINGS_COUNT = 0;
+	private static CALL_COUNT = 0;
+
+	parentContainer: Container;
+	previous: Component;
+	next: Component;
+
+	isEntrySupported(): boolean {
+		return true;
+	}
+
+	isExitSupported(): boolean {
+		return true;
+	}
+
+	canConnectUpline(): boolean {
+		let ret = Component.CONNECTION_UPLINE_CACHE.get(this);
+		if (ret === undefined) {
+			ret = (this.isEntrySupported() 
+				&& this.parentContainer.hasUplineSupport(this));
+				Component.CONNECTION_UPLINE_CACHE.put(this, ret);
+		} else
+			Component.SAVINGS_COUNT++;
+		Component.CALL_COUNT++;
+		return ret;
+	}
+
+	canConnectDownline(): boolean {
+		let ret = Component.CONNECTION_DNLINE_CACHE.get(this);
+		if (ret === undefined) {
+			ret = (this.isExitSupported() 
+			&& this.parentContainer.hasDownlineSupport(this));
+			Component.CONNECTION_DNLINE_CACHE.put(this, ret);
+		} else
+			Component.SAVINGS_COUNT++;
+		Component.CALL_COUNT++;
+		return ret;
+	}
+}
+
+interface Containable {
+	getDownlineComponent(childCtx: Component): Component;
+	getUplineComponent(childCtx: Component): Component;
+}
+
+abstract class Container extends Component implements Containable {
+	items: Component[];
+
+	constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
+		super(tagName, attrs, text);
+		this.prepareItemsPriorToLinage(items);
+		this.prepareComponentLinage(items);
+	}
+
+	prepareItemsPriorToLinage(items: (string|Component)[]): void {
+	}
+
+	protected prepareComponentLinage(items: (string|Component)[]): void {
+		this.items = items.map((val: string | Component, i: number, arr: (string | Component)[]) => {
+			let newVal: Component = makeTerminalIfString(val);
+			newVal.parentContainer = this;
+			newVal.previous = (i === 0 ? undefined : arr[i-1]) as Component;
+			if (newVal.previous)
+				newVal.previous.next = newVal;
+			return newVal;
+		});
+	}
+
+	// assertion can be removed after sufficient testing
+	protected assertValidLinageVerification(childCtx: Component): void {
+		if (this.items.indexOf(childCtx) === -1)
+			throw new Error(`Invalid argument: linage validation is limited to parent/child relationships`);
+	}
+
+	abstract getDownlineComponent(childCtx: Component): Component;
+
+	abstract getUplineComponent(childCtx: Component): Component;
+
+	hasDownlineSupport(childCtx: Component): boolean {
+		if (!childCtx.parentContainer)
+			return true;
+		let next = childCtx.parentContainer.getDownlineComponent(childCtx);
+		if (next)
+			return next.isEntrySupported();
+		// go up a level and try parent
+		return childCtx.parentContainer.hasDownlineSupport(childCtx.parentContainer); 
+	}
+
+	hasUplineSupport(childCtx: Component): boolean {
+		if (!childCtx.parentContainer)
+			return true;
+		let previous = childCtx.parentContainer.getUplineComponent(childCtx);
+		if (previous)
+			return previous.isExitSupported();
+		// go up a level and try parent
+		return childCtx.parentContainer.hasUplineSupport(childCtx.parentContainer); 
+	}
+}
+
+interface Sequenceable {
+	// NB: threaded sequences (eg. alternating sequence) have a different
+	// isEntry|ExitSupported & Up|Down line acquisition strategy
+	isThreaded(): boolean;
+}
+
+class SequenceableContainer extends Container implements Sequenceable {
+	constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
+		super(items, tagName, attrs, text);
+	}
+
+	isThreaded(): boolean {
+		return false;
+	}
+
+	isEntrySupported(): boolean {
+		let ret = this.items[0].isEntrySupported();
+		return ret;
+	}
+
+	isExitSupported(): boolean {
+		let ret = this.items[this.items.length-1].isExitSupported();
+		return ret;
+	}
+
+	getDownlineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		if (childCtx.next)
+			return childCtx.next;
+		return undefined;
+	}
+
+	getUplineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		if (childCtx.previous)
+			return childCtx.previous;
+		return undefined;
+	}
+}
+
+export interface Diagramable {
+	getItems(): Component[];
+	isFormatted(): boolean;
+	refresh(): void;
+	addTo(parent?:FakeSVG | Node): any;
+	toSVG(): any;
+	toString(): any;
+}
+
+export class ConceptDiagram extends SequenceableContainer implements Diagramable {
+	formatted: boolean = false;
 	constructor(...items) {
-		super('svg', {class: Options.DIAGRAM_CLASS});
-		this.items = items.map(wrapString);
-		if(!(this.items[0] instanceof Start)) {
-			this.items.unshift(new Start());
-		}
-		if(!(this.items[this.items.length-1] instanceof End)) {
-			this.items.push(new End());
-		}
-		this.up = this.down = this.height = this.width = 0;
+		super(items, 'svg', {class: Options.DIAGRAM_CLASS}, undefined);
+		this.needsSpace = false;
+		this.refresh();
+	}
+
+	getItems(): Component[] {
+		return this.items;
+	}
+
+	isFormatted(): boolean {
+		return this.formatted;
+	}
+
+	refresh(): void {
 		for(const item of this.items) {
 			this.width += item.width + (item.needsSpace?20:0);
 			this.up = Math.max(this.up, item.up - this.height);
@@ -225,6 +414,7 @@ export class Diagram extends FakeSVG {
 		}
 		this.formatted = false;
 	}
+
 	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
 		paddingt = unnull(paddingt, 20);
 		paddingr = unnull(paddingr, paddingt, 20);
@@ -237,8 +427,10 @@ export class Diagram extends FakeSVG {
 		let extraViewboxHeight = 0; 		
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
-			if(item.needsSpace) {
-				new Path(x,y).h(10).addTo(g);
+			if(item.needsSpace && i > 0) {
+				if (item.canConnectUpline()) {
+					new Path(x,y).h(10).addTo(g);
+				}
 				x += 10;
 			}
 			if (item instanceof Choice) // diagram viewbox height defect for Choice/Stack combo
@@ -246,67 +438,94 @@ export class Diagram extends FakeSVG {
 			item.format(x, y, item.width).addTo(g);
 			x += item.width;
 			y += item.height;
-			if(item.needsSpace) {
-				new Path(x,y).h(10).addTo(g);
+			if(item.needsSpace && i < this.items.length-1) {
+				if (item.canConnectDownline()) {
+					new Path(x,y).h(10).addTo(g);
+				}
 				x += 10;
 			}
 		}
-		this.attrs.width = this.width + paddingl + paddingr;
-		this.attrs.height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
-		this.attrs.viewBox = "0 0 " + this.attrs.width + " " + this.attrs.height;
+		// this.attrs.width = this.width + paddingl + paddingr;
+		// this.attrs.height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
+		let _width = this.width + paddingl + paddingr;
+		let _height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
+		this.attrs = {...this.attrs, ...{
+				width: _width,
+				height: _height,
+				viewBox: `0 0 ${_width} ${_height}`
+			}};
 		g.addTo(this);
 		this.formatted = true;
 		return this;
 	}
-	addTo(parent) {
+
+	addTo(parent?:FakeSVG | Node): any {
 		if(!parent) {
 			var scriptTag = document.getElementsByTagName('script');
 			let scriptTagItem = scriptTag[scriptTag.length - 1];
 			parent = scriptTagItem.parentNode;
 		}
-		return super.addTo.call(this, parent);
+		return super.addTo(parent);
 	}
-	toSVG() {
+
+	toSVG(): any {
 		if (!this.formatted) {
 			this.format();
 		}
-		return super.toSVG.call(this);
+		return super.toSVG();
 	}
-	toString() {
+
+	toString(): string {
 		if (!this.formatted) {
 			this.format();
 		}
-		return super.toString.call(this);
+		return super.toString();
+	}	
+} 
+funcs.ConceptDiagram = (...args)=>new ConceptDiagram(...args);
+
+
+export class Diagram extends ConceptDiagram {
+	prepareItemsPriorToLinage(items: (string|Component)[]): void {
+		if(!(items[0] instanceof Start)) {
+			items.unshift(new Start());
+		}
+		if(!(items[items.length-1] instanceof End)) {
+			items.push(new End());
+		}
 	}
 }
 funcs.Diagram = (...args)=>new Diagram(...args);
 
 
-export class ComplexDiagram extends FakeSVG {
-	constructor(...items) {
-		super('svg');
-		var diagram = new Diagram(...items);
-		diagram.items[0] = new Start({type:"complex"});
-		diagram.items[diagram.items.length-1] = new End({type:"complex"});
-		return diagram;
+export class ComplexDiagram extends Diagram {
+	prepareItemsPriorToLinage(items: (string|Component)[]): void {
+		super.prepareItemsPriorToLinage(items);
+		(<Start>this.items[0]).type = "complex";
+		(<End>this.items[this.items.length-1]).type = "complex";
 	}
 }
 funcs.ComplexDiagram = (...args)=>new ComplexDiagram(...args);
 
+interface Conditionable {
+	// consider using -2 for all, -1 for any, 0 - none, 1... for selection 
+	getDefaultIndex(): number;
+}
 
-export class Sequence extends FakeSVG {
-	items: (FakeSVG | Terminal)[];
-	needsSpace: boolean;
-	up: number;
-	down: number;
-	height: number;
-	width: number;
-	constructor(...items) {
-		super('g');
-		this.items = items.map(wrapString);
-		var numberOfItems = this.items.length;
-		this.needsSpace = true;
-		this.up = this.down = this.height = this.width = 0;
+interface Repeatable {
+	// services that likely require extension considerations
+	isThreaded(): boolean;
+	isExitSupported(): boolean;
+	getDownlineComponent(childCtx: Component): Component;
+	getUplineComponent(childCtx: Component): Component;
+}
+
+class Control extends Component {
+}
+
+export class Sequence extends SequenceableContainer implements Sequenceable {
+	constructor(...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			this.width += item.width + (item.needsSpace?20:0);
@@ -321,26 +540,34 @@ export class Sequence extends FakeSVG {
 			this.attrs['data-type'] = "sequence";
 		}
 	}
-	format(x?,y?,width?) {
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		if (!(this.items[this.items.length-1] instanceof End))
+		if (this.canConnectUpline()) {
+			new Path(x,y).h(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
 			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		}
 		x += gaps[0];
 
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			if(item.needsSpace && i > 0) {
-				new Path(x,y).h(10).addTo(this);
-				x += 10;
+				if (item.canConnectUpline()) {
+					new Path(x,y).h(10).addTo(this);
+				} 
+				x += 10;	
 			}
 			item.format(x, y, item.width).addTo(this);
 			x += item.width;
 			y += item.height;
 			if(item.needsSpace && i < this.items.length-1) {
-				new Path(x,y).h(10).addTo(this);
-				x += 10;
+				if (item.canConnectDownline()) {
+					new Path(x,y).h(10).addTo(this);
+				} 
+				x += 10;	
 			}
 		}
 		return this;
@@ -348,27 +575,16 @@ export class Sequence extends FakeSVG {
 }
 funcs.Sequence = (...args)=>new Sequence(...args);
 
-
-export class Stack extends FakeSVG {
-	items: (FakeSVG | Terminal)[];
-	width: any;
-	needsSpace: boolean;
-	up: any;
-	down: any;
-	height: number;
-	constructor(...items) {
-		super('g');
+export class Stack extends SequenceableContainer implements Sequenceable {
+	constructor(...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		if( items.length === 0 ) {
 			throw new RangeError("Stack() must have at least one child.");
 		}
-		this.items = items.map(wrapString);
 		this.width = Math.max.apply(null, this.items.map(function(e) { return e.width + (e.needsSpace?20:0); }));
-		//if(this.items[0].needsSpace) this.width -= 10;
-		//if(this.items[this.items.length-1].needsSpace) this.width -= 10;
 		if(this.items.length > 1){
 			this.width += Options.AR*2;
 		}
-		this.needsSpace = true;
 		this.up = this.items[0].up;
 		this.down = this.items[this.items.length-1].down;
 
@@ -389,17 +605,21 @@ export class Stack extends FakeSVG {
 			this.attrs['data-type'] = "stack";
 		}
 	}
-	format(x?,y?,width?) {
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
+		if (this.canConnectUpline()) {
+				new Path(x,y).h(gaps[0]).addTo(this);
+		}
 		x += gaps[0];
 		var xInitial = x;
 		if(this.items.length > 1) {
-			new Path(x, y).h(Options.AR).addTo(this);
+			if (this.canConnectDownline()) {
+				new Path(x, y).h(Options.AR).addTo(this);
+			}
 			x += Options.AR;
 		}
 
-		let lastItem;		
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			var innerWidth = this.width - (this.items.length>1 ? Options.AR*2 : 0);
@@ -408,40 +628,34 @@ export class Stack extends FakeSVG {
 			y += item.height;
 
 			if(i !== this.items.length-1) {
-				new Path(x, y)
+				if (this.items[i+1].canConnectUpline()) {
+					new Path(x, y)
 					.arc('ne').downFn(Math.max(0, item.down + Options.VS - Options.AR*2))
 					.arc('es').left(innerWidth)
 					.arc('nw').downFn(Math.max(0, this.items[i+1].up + Options.VS - Options.AR*2))
 					.arc('ws').addTo(this);
+				}
 				y += Math.max(item.down + Options.VS, Options.AR*2) + Math.max(this.items[i+1].up + Options.VS, Options.AR*2);
 				//y += Math.max(Options.AR*4, item.down + Options.VS*2 + this.items[i+1].up)
 				x = xInitial+Options.AR;
 			}
-			lastItem = item;
 		}
 
 		if(this.items.length > 1) {
-			if (!(lastItem instanceof End))	
+			if (item.canConnectDownline()) {
 				new Path(x,y).h(Options.AR).addTo(this);
+			}
 			x += Options.AR;
+			new Path(x,y).h(gaps[1]).addTo(this);
 		}
-		new Path(x,y).h(gaps[1]).addTo(this);
-
 		return this;
 	}
 }
 funcs.Stack = (...args)=>new Stack(...args);
 
-
-export class OptionalSequence extends FakeSVG {
-	items: (FakeSVG | Terminal)[];
-	needsSpace: boolean;
-	width: number;
-	up: number;
-	height: any;
-	down: any;
-	constructor(...items) {
-		super('g');
+export class OptionalSequence extends SequenceableContainer implements Sequenceable, Conditionable {
+	constructor(...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		if( items.length === 0 ) {
 			throw new RangeError("OptionalSequence() must have at least one child.");
 		}
@@ -450,8 +664,7 @@ export class OptionalSequence extends FakeSVG {
 			// return new Sequence(items);
 		}
 		var arc = Options.AR;
-		this.items = items.map(wrapString);
-		this.needsSpace = false;
+		this.needsSpace = true;
 		this.width = 0;
 		this.up = 0;
 		this.height = sum(this.items, function(x){return x.height});
@@ -476,21 +689,32 @@ export class OptionalSequence extends FakeSVG {
 			this.attrs['data-type'] = "optseq";
 		}
 	}
-	format(x?, y?, width?) {
+
+	getDefaultIndex(): number {
+		return -1;
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		var arc = Options.AR;
 		var gaps = determineGaps(width, this.width);
-		new Path(x, y).right(gaps[0]).addTo(this);
-		new Path(x + gaps[0] + this.width, y + this.height).right(gaps[1]).addTo(this);
+		if (this.canConnectUpline()) {
+			new Path(x, y).right(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x + gaps[0] + this.width, y + this.height).right(gaps[1]).addTo(this);
+		}
 		x += gaps[0];
 		var upperLineY = y - this.up;
 		var last = this.items.length - 1;
+		let show1stUpper = true;
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
 			var itemSpace = (item.needsSpace?10:0);
 			var itemWidth = item.width + itemSpace;
 			if(i === 0) {
 				// Upper skip
-				new Path(x,y)
+				if (/* item.canConnectUpline() */ true) {
+					new Path(x,y)
 					.arc('se')
 					.upFn(y - upperLineY - arc*2)
 					.arc('wn')
@@ -499,33 +723,49 @@ export class OptionalSequence extends FakeSVG {
 					.downFn(y + item.height - upperLineY - arc*2)
 					.arc('ws')
 					.addTo(this);
-				// Straight line
-				new Path(x, y)
-					.right(itemSpace + arc)
-					.addTo(this);
+				} else
+					show1stUpper = false;
+				if ((show1stUpper && i === last) ||
+						(item.canConnectUpline())) {
+					// Straight line
+					new Path(x, y)
+						.right(itemSpace + arc)
+						.addTo(this);
+				}
 				item.format(x + itemSpace + arc, y, item.width).addTo(this);
 				x += itemWidth + arc;
 				y += item.height;
+				if (show1stUpper && i === last) {
+					// Straight line
+					new Path(x,y)
+					.right(arc*2)
+					.addTo(this);
+				}
 				// x ends on the far side of the first element,
 				// where the next element's skip needs to begin
 			} else if(i < last) {
 				// Upper skip
-				new Path(x, upperLineY)
+				if (show1stUpper) {
+					new Path(x, upperLineY)
 					.right(arc*2 + Math.max(itemWidth, arc) + arc)
 					.arc('ne')
 					.downFn(y - upperLineY + item.height - arc*2)
 					.arc('ws')
 					.addTo(this);
-				// Straight line
-				new Path(x,y)
-					.right(arc*2)
-					.addTo(this);
+				}
+				if (item.canConnectUpline()) {
+					// Straight line
+						new Path(x,y)
+						.right(arc*2)
+						.addTo(this);
+				}
 				item.format(x + arc*2, y, item.width).addTo(this);
 				new Path(x + item.width + arc*2, y + item.height)
-					.right(itemSpace + arc)
-					.addTo(this);
-				// Lower skip
-				new Path(x,y)
+				.right(itemSpace + arc)
+				.addTo(this);
+				if (item.canConnectUpline()) {
+					// Lower skip
+					new Path(x,y)
 					.arc('ne')
 					.downFn(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
 					.arc('ws')
@@ -533,28 +773,35 @@ export class OptionalSequence extends FakeSVG {
 					.arc('se')
 					.upFn(item.down + Options.VS - arc*2)
 					.arc('wn')
-					.addTo(this);
+					.addTo(this); 
+				}
 				x += arc*2 + Math.max(itemWidth, arc) + arc;
 				y += item.height;
 			} else {
 				// Straight line
-				new Path(x, y)
+				if (item.canConnectUpline()) {
+					new Path(x, y)
 					.right(arc*2)
 					.addTo(this);
+				}
 				item.format(x + arc*2, y, item.width).addTo(this);
-				new Path(x + arc*2 + item.width, y + item.height)
+				if (item.canConnectDownline()) {
+					new Path(x + arc*2 + item.width, y + item.height)
 					.right(itemSpace + arc)
 					.addTo(this);
+				}
 				// Lower skip
-				new Path(x,y)
-					.arc('ne')
-					.downFn(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
-					.arc('ws')
-					.right(itemWidth - arc)
-					.arc('se')
-					.upFn(item.down + Options.VS - arc*2)
-					.arc('wn')
-					.addTo(this);
+				if (item.canConnectDownline()) {
+					new Path(x,y)
+						.arc('ne')
+						.downFn(item.height + Math.max(item.down + Options.VS, arc*2) - arc*2)
+						.arc('ws')
+						.right(itemWidth - arc)
+						.arc('se')
+						.upFn(item.down + Options.VS - arc*2)
+						.arc('wn')
+						.addTo(this);
+				}
 			}
 		}
 		return this;
@@ -562,26 +809,17 @@ export class OptionalSequence extends FakeSVG {
 }
 funcs.OptionalSequence = (...args)=>new OptionalSequence(...args);
 
-
-export class AlternatingSequence extends FakeSVG {
-	items: (FakeSVG | Terminal)[];
-	needsSpace: boolean;
-	up: any;
-	down: any;
-	height: number;
-	width: number;
-	constructor(...items) {
-		super('g');
+export class AlternatingSequence extends SequenceableContainer implements Sequenceable {
+	constructor(...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		if( items.length === 1 ) {
-			items.push(new Skip());
-			// return new Sequence(items);
+			 // rather than use delegation and lose the intended feature add an empty
+			items.push(new Skip()); // return new Sequence(items);
 		}
 		if( items.length !== 2 ) {
-			throw new RangeError("AlternatingSequence() must have one or two children.");
+			throw new RangeError("AlternatingSequence() must have two children.");
 		}
-		this.items = items.map(wrapString);
 		this.needsSpace = false;
-
 		const arc = Options.AR;
 		const vert = Options.VS;
 		const max = Math.max;
@@ -610,13 +848,51 @@ export class AlternatingSequence extends FakeSVG {
 			this.attrs['data-type'] = "altseq";
 		}
 	}
-	format(x?, y?, width?) {
+
+	isThreaded(): boolean {
+		return this.items.length > 1;
+	}
+
+	isEntrySupported(): boolean {
+		let ret = super.isEntrySupported(); 
+		if (ret) 
+			return ret;
+		if (this.items.length > 1)
+			ret = this.items[1].isEntrySupported();
+		return ret;
+	}
+
+	isExitSupported(): boolean {
+		let ret = super.isExitSupported(); 
+		if (ret) 
+			return ret;
+		if (this.items.length > 1)
+			ret = this.items[0].isExitSupported();
+		return ret;
+	}
+
+	getDownlineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		// go up a level and try parent's next sibling
+		return childCtx.parentContainer.next; 
+	}
+
+	getUplineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		// go up a level and try parent's previous sibling
+		return childCtx.parentContainer.previous; 
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		const arc = Options.AR;
 		const gaps = determineGaps(width, this.width);
-		new Path(x,y).right(gaps[0]).addTo(this);
-		console.log(gaps);
+		if (this.canConnectUpline()) {
+			new Path(x,y).right(gaps[0]).addTo(this);
+		}
 		x += gaps[0];
-		new Path(x+this.width, y).right(gaps[1]).addTo(this);
+		if (this.canConnectDownline()) {
+			new Path(x+this.width, y).right(gaps[1]).addTo(this);
+		}
 		// bounding box
 		//new Path(x+gaps[0], y).upFn(this.up).right(this.width).downFn(this.up+this.down).left(this.width).upFn(this.down).addTo(this);
 		const first = this.items[0];
@@ -625,46 +901,76 @@ export class AlternatingSequence extends FakeSVG {
 		// top
 		const firstIn = this.up - first.up;
 		const firstOut = this.up - first.up - first.height;
-		new Path(x,y).arc('se').upFn(firstIn-2*arc).arc('wn').addTo(this);
+		if (first.canConnectUpline())
+			new Path(x,y).arc('se').upFn(firstIn-2*arc).arc('wn').addTo(this);
 		first.format(x + 2*arc, y - firstIn, this.width - 4*arc).addTo(this);
-		new Path(x + this.width - 2*arc, y - firstOut).arc('ne').downFn(firstOut - 2*arc).arc('ws').addTo(this);
+		if (first.canConnectDownline())
+			new Path(x + this.width - 2*arc, y - firstOut).arc('ne').downFn(firstOut - 2*arc).arc('ws').addTo(this);
 
 		// bottom
 		const secondIn = this.down - second.down - second.height;
 		const secondOut = this.down - second.down;
-		new Path(x,y).arc('ne').downFn(secondIn - 2*arc).arc('ws').addTo(this);
+		if (second.canConnectUpline())
+			new Path(x,y).arc('ne').downFn(secondIn - 2*arc).arc('ws').addTo(this);
 		second.format(x + 2*arc, y + secondIn, this.width - 4*arc).addTo(this);
-		new Path(x + this.width - 2*arc, y + secondOut).arc('se').upFn(secondOut - 2*arc).arc('wn').addTo(this);
-
+		if (second.canConnectDownline())
+			new Path(x + this.width - 2*arc, y + secondOut).arc('se').upFn(secondOut - 2*arc).arc('wn').addTo(this);
 		// crossover
 		const arcX = 1 / Math.sqrt(2) * arc * 2;
 		const arcY = (1 - 1 / Math.sqrt(2)) * arc * 2;
 		const crossY = Math.max(arc, Options.VS);
 		const crossX = (crossY - arcY) + arcX;
 		const crossBar = (this.width - 4*arc - crossX)/2;
-		new Path(x+arc, y - crossY/2 - arc).arc('ws').right(crossBar)
-			.arc_8('n', 'cw').l(crossX - arcX, crossY - arcY).arc_8('sw', 'ccw')
-			.right(crossBar).arc('ne').addTo(this);
-		new Path(x+arc, y + crossY/2 + arc).arc('wn').right(crossBar)
+		if (second.isExitSupported())
+			new Path(x+arc, y - crossY/2 - arc).arc('ws').right(crossBar)
+				.arc_8('n', 'cw').l(crossX - arcX, crossY - arcY).arc_8('sw', 'ccw')
+				.right(crossBar).arc('ne').addTo(this);
+		if (first.isExitSupported())
+			new Path(x+arc, y + crossY/2 + arc).arc('wn').right(crossBar)
 			.arc_8('s', 'ccw').l(crossX - arcX, -(crossY - arcY)).arc_8('nw', 'cw')
 			.right(crossBar).arc('se').addTo(this);
-
 		return this;
 	}
 }
 funcs.AlternatingSequence = (...args)=>new AlternatingSequence(...args);
 
+abstract class ConditionableContainer extends Container implements Conditionable {
+	abstract getDefaultIndex(): number;
 
-export class Choice extends FakeSVG {
+	isEntrySupported(): boolean {
+		for (let i = 0; i < this.items.length; i++) {
+			// need at least one
+			if (this.items[i].isEntrySupported())	
+				return true;
+		}
+		return false;
+	}
+
+	isExitSupported(): boolean {
+		for (let i = 0; i < this.items.length; i++) {
+			// need at least one
+			if (this.items[i].isExitSupported())	
+				return true;
+		}
+		return false;
+	}
+
+	getDownlineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		return childCtx.parentContainer.next; // go up a level and try parent's next sibling
+	}
+
+	getUplineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		return childCtx.parentContainer.previous; // go up a level and try parent's previous sibling
+	}
+}
+
+export class Choice extends ConditionableContainer implements Conditionable {
 	normal: number;
-	items: (FakeSVG | Terminal)[];
-	width: any;
-	height: any;
-	up: any;
-	down: any;
 	extraHeight = 0;
-	constructor(normal, ...items) {
-		super('g');
+	constructor(normal: number, ...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		if( typeof normal !== "number" || normal !== Math.floor(normal) ) {
 			throw new TypeError("The first argument of Choice() must be an integer.");
 		} else if(normal < 0 || normal >= items.length) {
@@ -674,11 +980,10 @@ export class Choice extends FakeSVG {
 		}
 		var first = 0;
 		var last = items.length - 1;
-		this.items = items.map(wrapString);
 		this.width = Math.max.apply(null, this.items.map(function(el){return el.width})) + Options.AR*4;
 		this.height = this.items[normal].height;
 		this.up = this.items[first].up;
-		var arcs;
+		var arcs: number;
 		for(var i = first; i < normal; i++) {
 			if(i == normal-1) arcs = Options.AR*2;
 			else arcs = Options.AR;
@@ -696,39 +1001,54 @@ export class Choice extends FakeSVG {
 			this.attrs['data-type'] = "choice";
 		}
 	}
-	format(x?,y?,width?) {
+
+	getDefaultIndex(): number {
+		return this.normal;
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		if (this.canConnectUpline()) {
+			new Path(x,y).h(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		}
 		x += gaps[0];
 
 		var last = this.items.length -1;
 		var innerWidth = this.width - Options.AR*4;
-
-		// Do the elements that curve above
 		var distanceFromY;
 		for(var i = this.normal - 1; i >= 0; i--) {
 			let item = this.items[i];
 			if( i == this.normal - 1 ) {
 				distanceFromY = Math.max(Options.AR*2, this.items[this.normal].up + Options.VS + item.down + item.height);
 			}
-			new Path(x,y)
+			if (item.canConnectUpline()) {
+				new Path(x,y)
 				.arc('se')
 				.upFn(distanceFromY - Options.AR*2)
 				.arc('wn').addTo(this);
+			}
 			item.format(x+Options.AR*2,y - distanceFromY,innerWidth).addTo(this);
-			new Path(x+Options.AR*2+innerWidth, y-distanceFromY+item.height)
+			if (item.canConnectDownline()) {
+				new Path(x+Options.AR*2+innerWidth, y-distanceFromY+item.height)
 				.arc('ne')
 				.downFn(distanceFromY - item.height + this.height - Options.AR*2)
 				.arc('ws').addTo(this);
+		}
 			distanceFromY += Math.max(Options.AR, item.up + Options.VS + (i === 0 ? 0 : this.items[i-1].down+this.items[i-1].height));
 		}
-
-		// Do the straight-line path.
-		new Path(x,y).right(Options.AR*2).addTo(this);
-		this.items[this.normal].format(x+Options.AR*2, y, innerWidth).addTo(this);
-		new Path(x+Options.AR*2+innerWidth, y+this.height).right(Options.AR*2).addTo(this);
+		let item = this.items[this.normal];
+		// Do the straight-line path. (normals is skip)
+		if (item.canConnectUpline()) {
+			new Path(x,y).right(Options.AR*2).addTo(this);
+		}
+		item.format(+x+Options.AR*2, y, innerWidth).addTo(this);
+		if (item.canConnectDownline()) {
+			new Path(x+Options.AR*2+innerWidth, y+this.height).right(Options.AR*2).addTo(this);
+		}
 
 		// Do the elements that curve below
 		for(i = this.normal+1; i <= last; i++) {
@@ -736,56 +1056,39 @@ export class Choice extends FakeSVG {
 			if( i == this.normal + 1 ) {
 				distanceFromY = Math.max(Options.AR*2, this.height + this.items[this.normal].down + Options.VS + item.up);
 			}
-			new Path(x,y)
-				.arc('ne')
-				.downFn(distanceFromY - Options.AR*2)
-				.arc('ws').addTo(this);
-			item.format(x+Options.AR*2, y+distanceFromY, innerWidth).addTo(this);
-			let lastNode = item;
-			if (item instanceof Sequence
-					|| item instanceof Stack
-					|| item instanceof OptionalSequence
-					|| item instanceof AlternatingSequence
-				) {
-				lastNode = item.items[item.items.length-1];
-				if (item instanceof Stack)
-					this.extraHeight = 40 * item.items.length; // there is a defect with diagram viewbox height for Choice/Stack combo
+			if (item.canConnectUpline()) {
+				new Path(x,y)
+						.arc('ne')
+						.downFn(distanceFromY - Options.AR*2)
+						.arc('ws').addTo(this);
 			}
-			if (lastNode instanceof End && !lastNode.joinEol) {
-				// skip join with main line
-			} else {
+			item.format(x+Options.AR*2, y+distanceFromY, innerWidth).addTo(this);
+			if (item instanceof Stack)
+				this.extraHeight = 40 * item.items.length; // there is a defect with diagram viewbox height for Choice/Stack combo
+			if (item.canConnectDownline()) {
 				new Path(x+Options.AR*2+innerWidth, y+distanceFromY+item.height)
-				.arc('se')
-				.upFn(distanceFromY - Options.AR*2 + item.height - this.height)
-				.arc('wn').addTo(this);
+					.arc('se')
+					.upFn(distanceFromY - Options.AR*2 + item.height - this.height)
+					.arc('wn').addTo(this);
 			}
 			distanceFromY += Math.max(Options.AR, item.height + item.down + Options.VS + (i == last ? 0 : this.items[i+1].up));
 		}
-
 		return this;
 	}
 }
 funcs.Choice = (n,...args)=>new Choice(n,...args);
 
-
-export class HorizontalChoice extends FakeSVG {
-	items: (FakeSVG | Sequence | Terminal)[];
-	needsSpace: boolean;
-	width: number;
-	height: number;
+export class HorizontalChoice extends ConditionableContainer implements Conditionable {
 	_upperTrack: number;
-	up: number;
 	_lowerTrack: number;
-	down: number;
-	constructor(...items) {
-		super('g');
+	constructor(...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		if( items.length === 0 ) {
 			throw new RangeError("HorizontalChoice() must have at least one child.");
 		}
 		if( items.length === 1) {
-			items.push(new Skip());
+			items.push(new Skip()); // inject a skip to render as intended
 		}
-		this.items = items.map(wrapString);
 		const allButLast = this.items.slice(0, -1);
 		const middles = this.items.slice(1, -1);
 		const first = this.items[0];
@@ -822,17 +1125,25 @@ export class HorizontalChoice extends FakeSVG {
 		}
 		this.down = Math.max(this._lowerTrack, first.height + first.down);
 
-
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "horizontalchoice";
 		}
 	}
-	format(x?,y?,width?) {
+	
+	getDefaultIndex(): number {
+		return 0;
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		if (this.canConnectUpline()) {
+			new Path(x,y).h(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		}
 		x += gaps[0];
 
 		const first = this.items[0];
@@ -845,12 +1156,14 @@ export class HorizontalChoice extends FakeSVG {
 			+ (this.items.length - 2) * Options.AR*2
 			- Options.AR
 		);
+		if (this.items.length > 1) {
 		new Path(x,y)
 			.arc('se')
 			.v(-(this._upperTrack - Options.AR*2))
 			.arc('wn')
 			.h(upperSpan)
 			.addTo(this);
+		}
 
 		// lower track
 		var lowerSpan = (sum(allButFirst, x=>x.width+(x.needsSpace?20:0))
@@ -859,89 +1172,86 @@ export class HorizontalChoice extends FakeSVG {
 			- Options.AR
 		);
 		var lowerStart = x + Options.AR + first.width+(first.needsSpace?20:0) + Options.AR*2;
-		new Path(lowerStart, y+this._lowerTrack)
+		if (this.items.length > 1) {
+			new Path(lowerStart, y+this._lowerTrack)
 			.h(lowerSpan)
 			.arc('se')
 			.v(-(this._lowerTrack - Options.AR*2))
 			.arc('wn')
 			.addTo(this);
-
-		// Items
+		}
+		// Items Typscript reporting errors with js generator
 		// for(const [i, item] of enumerate(this.items)) {
 		for (let i = 0; i < this.items.length; i++) {
 			const item = this.items[i];
 			// input track
-			if(i === 0) {
-				new Path(x,y)
-					.h(Options.AR)
-					.addTo(this);
-				x += Options.AR;
-			} else {
-				new Path(x, y - this._upperTrack)
-					.arc('ne')
-					.v(this._upperTrack - Options.AR*2)
-					.arc('ws')
-					.addTo(this);
-				x += Options.AR*2;
-			}
-
+				if(i === 0) {
+					new Path(x,y)
+						.h(Options.AR)
+						.addTo(this);
+					x += Options.AR;
+				} else {
+					if (item.canConnectUpline()) {
+						new Path(x, y - this._upperTrack)
+						.arc('ne')
+						.v(this._upperTrack - Options.AR*2)
+						.arc('ws')
+						.addTo(this);
+					}
+					x += Options.AR*2;
+				}
 			// item
 			var itemWidth = item.width + (item.needsSpace?20:0);
 			item.format(x, y, itemWidth).addTo(this);
 			x += itemWidth;
 
 			// output track
-			if(i === this.items.length-1) {
-				if(item.height === 0) {
-					new Path(x,y)
-						.h(Options.AR)
-						.addTo(this);
-				} else {
-					new Path(x,y+item.height)
-					.arc('se')
-					.addTo(this);
-				}
-			} else if(i === 0 && item.height > this._lowerTrack) {
-				// Needs to arc up to meet the lower track, not down.
-				if(item.height - this._lowerTrack >= Options.AR*2) {
-					new Path(x, y+item.height)
+				if(i === this.items.length-1) {
+					if(item.height === 0) {
+						new Path(x,y)
+							.h(Options.AR)
+							.addTo(this);
+					} else {
+						new Path(x,y+item.height)
 						.arc('se')
-						.v(this._lowerTrack - item.height + Options.AR*2)
-						.arc('wn')
 						.addTo(this);
+					}
+				} else if(i === 0 && item.height > this._lowerTrack) {
+					// Needs to arc up to meet the lower track, not down.
+					if(item.height - this._lowerTrack >= Options.AR*2) {
+						new Path(x, y+item.height)
+							.arc('se')
+							.v(this._lowerTrack - item.height + Options.AR*2)
+							.arc('wn')
+							.addTo(this);
+					} else {
+						// Not enough space to fit two arcs
+						// so just bail and draw a straight line for now.
+						new Path(x, y+item.height)
+							.l(Options.AR*2, this._lowerTrack - item.height)
+							.addTo(this);
+					}
 				} else {
-					// Not enough space to fit two arcs
-					// so just bail and draw a straight line for now.
-					new Path(x, y+item.height)
-						.l(Options.AR*2, this._lowerTrack - item.height)
+					if (item.canConnectDownline()) {
+						new Path(x, y+item.height)
+						.arc('ne')
+						.v(this._lowerTrack - item.height - Options.AR*2)
+						.arc('ws')
 						.addTo(this);
+					}
 				}
-			} else {
-				new Path(x, y+item.height)
-					.arc('ne')
-					.v(this._lowerTrack - item.height - Options.AR*2)
-					.arc('ws')
-					.addTo(this);
-			}
 		}
 		return this;
 	}
 }
-funcs.HorizontalChoice = (...args)=>new HorizontalChoice(...args);
+funcs.HorizontalChoice = (...args: any[])=>new HorizontalChoice(...args);
 
-
-export class MultipleChoice extends FakeSVG {
+export class MultipleChoice extends ConditionableContainer implements Conditionable {
 	normal: number;
 	type: any;
-	needsSpace: boolean;
-	items: (FakeSVG | Terminal)[];
 	innerWidth: any;
-	width: any;
-	up: any;
-	down: any;
-	height: any;
-	constructor(normal, type, ...items) {
-		super('g');
+	constructor(normal: number, type: string, ...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
 		if( typeof normal !== "number" || normal !== Math.floor(normal) ) {
 			throw new TypeError("The first argument of MultipleChoice() must be an integer.");
 		} else if(normal < 0 || normal >= items.length) {
@@ -955,7 +1265,6 @@ export class MultipleChoice extends FakeSVG {
 			this.type = type;
 		}
 		this.needsSpace = true;
-		this.items = items.map(wrapString);
 		this.innerWidth = max(this.items, function(x){return x.width});
 		this.width = 30 + Options.AR + this.innerWidth + Options.AR + 20;
 		this.up = this.items[0].up;
@@ -978,10 +1287,19 @@ export class MultipleChoice extends FakeSVG {
 			this.attrs['data-type'] = "multiplechoice";
 		}
 	}
-	format(x?, y?, width?) {
+
+	getDefaultIndex(): number {
+		return this.normal;
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		var gaps = determineGaps(width, this.width);
-		new Path(x, y).right(gaps[0]).addTo(this);
-		new Path(x + gaps[0] + this.width, y + this.height).right(gaps[1]).addTo(this);
+		if (this.canConnectUpline()) {
+			new Path(x, y).right(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x + gaps[0] + this.width, y + this.height).right(gaps[1]).addTo(this);
+		}
 		x += gaps[0];
 
 		var normal = this.items[this.normal];
@@ -1006,24 +1324,31 @@ export class MultipleChoice extends FakeSVG {
 			}
 		}
 
-		new Path(x + 30, y).right(Options.AR).addTo(this);
+		if (normal.canConnectUpline()) {
+			new Path(x + 30, y).right(Options.AR).addTo(this);
+		}
 		normal.format(x + 30 + Options.AR, y, this.innerWidth).addTo(this);
-		new Path(x + 30 + Options.AR + this.innerWidth, y + this.height).right(Options.AR).addTo(this);
-
+		if (normal.canConnectDownline()) {
+			new Path(x + 30 + Options.AR + this.innerWidth, y + this.height).right(Options.AR).addTo(this);
+		}
 		for(i = this.normal+1; i < this.items.length; i++) {
 			let item = this.items[i];
 			if(i == this.normal + 1) {
 				distanceFromY = Math.max(10+Options.AR, normal.height + normal.down + Options.VS + item.up);
 			}
-			new Path(x + 30, y)
+			if (item.canConnectUpline()) {
+				new Path(x + 30, y)
 				.downFn(distanceFromY - Options.AR)
 				.arc('ws')
 				.addTo(this);
+			}
 			item.format(x + 30 + Options.AR, y + distanceFromY, this.innerWidth).addTo(this);
-			new Path(x + 30 + Options.AR + this.innerWidth, y + distanceFromY + item.height)
+			if (item.canConnectDownline()) {
+				new Path(x + 30 + Options.AR + this.innerWidth, y + distanceFromY + item.height)
 				.arc('se')
 				.upFn(distanceFromY - Options.AR + item.height - normal.height)
 				.addTo(this);
+			}
 			if(i != this.items.length - 1) {
 				distanceFromY += Math.max(Options.AR, item.height + item.down + Options.VS + this.items[i+1].up);
 			}
@@ -1050,38 +1375,25 @@ export class MultipleChoice extends FakeSVG {
 		return this;
 	}
 }
-funcs.MultipleChoice = (n, t, ...args)=>new MultipleChoice(n, t, ...args);
+funcs.MultipleChoice = (n: number, t: string, ...args: any[])=>new MultipleChoice(n, t, ...args);
 
-
-// export class Optional extends FakeSVG {
-export class Optional extends Choice {
-	constructor(item, skip) {
+export class Optional extends Choice implements Conditionable {
+	constructor(item: Component, skip: string|undefined) {
 		super(skip === undefined ? 1: 0, new Skip(), item);
-		// if( skip === undefined )
-		// 	return new Choice(1, new Skip(), item);
-		// else if ( skip === "skip" )
-		// 	return new Choice(0, new Skip(), item);
-		// else
-		// 	throw "Unknown value for Optional()'s 'skip' argument.";
 	}
 }
-funcs.Optional = (item, skip)=>new Optional(item, skip);
+funcs.Optional = (item: Component, skip: string|undefined)=>new Optional(item, skip);
 
 
-export class OneOrMore extends FakeSVG {
-	item: FakeSVG | Terminal;
-	rep: FakeSVG | Terminal;
-	width: number;
-	height: any;
-	up: any;
-	down: number;
-	needsSpace: boolean;
+export class OneOrMore extends SequenceableContainer implements Repeatable {
+	item: Component;
+	rep: Component;
 	showArrow: boolean;
-	constructor(item, rep, showArrow=false) {
-		super('g');
-		rep = rep || (new Skip());
-		this.item = wrapString(item);
-		this.rep = wrapString(rep);
+	constructor(item: string|Component, rep: string|Component, showArrow=false) {
+		// super([makeTerminalIfString(item), makeTerminalIfString(rep || (new Skip()))], 'g', {}, undefined);
+		super([item, rep || (new Skip())], 'g', {}, undefined);
+		this.item = this.items[0];
+		this.rep = this.items[1];
 		this.width = Math.max(this.item.width, this.rep.width) + Options.AR*2;
 		this.height = this.item.height;
 		this.up = this.item.up;
@@ -1093,17 +1405,47 @@ export class OneOrMore extends FakeSVG {
 			this.attrs['data-type'] = "oneormore";
 		}
 	}
-	format(x?,y?,width?) {
+
+	isThreaded(): boolean {
+		// only to extent that the return line may have optional nodes
+		return true; 
+	}
+
+	isExitSupported(): boolean {
+		// note, the repeat journey follows the separator therefore we are only
+		// interested in the mainline of the 1st sequence
+		return this.items[0].isExitSupported(); 
+	}
+
+	getDownlineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		return childCtx.parentContainer.next; // go up a level and try parent's next sibling
+	}
+
+	getUplineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		return childCtx.parentContainer.previous; // go up a level and try parent's previous sibling
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		if (this.canConnectUpline()) {
+			new Path(x,y).h(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		}
 		x += gaps[0];
 
 		// Draw item
-		new Path(x,y).right(Options.AR).addTo(this);
+		if (this.item.canConnectUpline()) {
+			new Path(x,y).right(Options.AR).addTo(this);
+		}
 		this.item.format(x+Options.AR,y,this.width-Options.AR*2).addTo(this);
-		new Path(x+this.width-Options.AR,y+this.height).right(Options.AR).addTo(this);
+		if (this.item.canConnectDownline()) {
+			new Path(x+this.width-Options.AR,y+this.height).right(Options.AR).addTo(this);
+		}
 
 		// Draw repeat arc
 		var distanceFromY = Math.max(Options.AR*2, this.item.height+this.item.down+Options.VS+this.rep.up);
@@ -1118,288 +1460,233 @@ export class OneOrMore extends FakeSVG {
 			new Path(x-arrowSize, y+distanceFromY/2 + arrowSize/2 /*, {class:"arrow"} */).
 				l(arrowSize, -arrowSize).l(arrowSize*multiplier, arrowSize).addTo(this);
 		}
-
 		return this;
 	}
 }
-funcs.OneOrMore = (item, rep)=>new OneOrMore(item, rep);
+funcs.OneOrMore = (item: Component|string, rep: Component|string)=>new OneOrMore(item, rep);
 
-
-// export class ZeroOrMore extends FakeSVG {
-export class ZeroOrMore extends Optional {
-	constructor(item, rep, skip) {
+export class ZeroOrMore extends Optional implements Conditionable, Repeatable {
+	constructor(item: Component|string, rep: Component|string, skip: string|undefined) {
 		super(new OneOrMore(item, rep), skip);
-		// return new Optional(new OneOrMore(item, rep), skip);
+	}
+
+	isThreaded(): boolean {
+		return (<OneOrMore>(this.items[0])).isThreaded()
 	}
 }
-funcs.ZeroOrMore = (item, rep, skip)=>new ZeroOrMore(item, rep, skip);
+funcs.ZeroOrMore = (item: Component|string, rep: Component|string, skip: string|undefined)=>new ZeroOrMore(item, rep, skip);
 
+class LabelTitleLinkControl extends Control {
+	constructor(public label?: string, public title?: string, public href?: string, attrs?: object) {
+		super('g', attrs);
+		this.label = label ? label : "";
+	}
 
-export class Start extends FakeSVG {
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	type: string;
-	label: string;
-	title: string;
-	href: string;
-	joinSol: boolean;
-	constructor({type="simple", label=undefined, href=undefined, joinSol=false}={}) {
-		super('g');
+	protected formatSides(x: number, y: number, width: number, addToRightY=0): number {
+		// Hook up the two sides if this is narrower than its stated width.
+		var gaps = determineGaps(width, this.width);
+		if (this.canConnectUpline()) {
+			new Path(x, y).h(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x + gaps[0] + this.width, y+addToRightY).h(gaps[1]).addTo(this);
+		}
+		x += gaps[0];
+	return x;
+	}
+}
+
+class TerminusNode extends LabelTitleLinkControl {
+	constructor(public type: string="complex", label?: string, title?: string, href?: string, public connectToMainline: boolean = true) {
+		super(label, title, href);
 		this.width = 20;
 		this.height = 0;
 		this.up = 10;
 		this.down = 10;
-		this.type = type;
-		this.href = href;
-		this.joinSol = joinSol; 
+		this.needsSpace = true; // false
 		if(label) {
 			this.label = ""+label;
 			this.width = Math.max(20, this.label.length * Options.CHAR_WIDTH + 10);
 		}
+	}
+
+	format(x?: number,y?: number, width?: number): FakeSVG {
+		if(this.label) {
+			var text = new FakeSVG('text', this.formatTextElementAttr(x, y), this.label);
+			if(this.href)
+				new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
+			else
+				text.addTo(this);
+			if(this.title)
+				new FakeSVG('title', {}, []).addTo(this);
+		}
+		return this;
+	}
+
+	protected formatTextElementAttr(x: number, y: number): object {
+		return { x: x, y: y - 15, style: "text-anchor:start" };
+	}
+}
+
+export class Start extends TerminusNode {
+	constructor(type: string="simple", label: string=undefined, href: string=undefined, connectToMainline:boolean=true) {
+		super(type, label, undefined, href, connectToMainline);
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "start";
 		}
 	}
-	format(x?,y?) {
+
+	format(x?: number,y?: number, width?: number): FakeSVG {
+		x = this.formatSides(x, y, width);
 		let path = new Path(x, y-10);
 		if (this.type === "complex") {
-			path.downFn(20)
-				.m(0, -10)
-				.right(this.width)
-				.addTo(this);
+				path.downFn(20)
+					.m(0, -10)
+					.right(this.width)
+					.addTo(this);
 		} else {
-			path.downFn(20)
-				.m(10, -20)
-				.downFn(20)
-				.m(-10, -10)
-				.right(this.width)
-				.addTo(this);
+				path.downFn(20)
+					.m(10, -20)
+					.downFn(20)
+					.m(-10, -10)
+					.right(this.width)
+					.addTo(this);
 		}
-		if(this.label) {
-			var text = new FakeSVG('text', {x:x, y:y-15, style:"text-anchor:start"}, this.label).addTo(this);
-			if(this.href)
-				new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-			else
-				text.addTo(this);
-			if(this.title)
-				new FakeSVG('title', {}, []).addTo(this);
-		}
-		return this;
+		return super.format(x, y, width);
+	}
+
+	isEntrySupported(): boolean {
+		return this.connectToMainline;
 	}
 }
-funcs.Start = (...args)=>new Start(...args);
+funcs.Start = (t: string, l: string, h: string, c: boolean)=>new Start(t, l, h, c);
 
-
-export class End extends FakeSVG {
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	type: string;
-	label: string;
-	title: string;
-	href: string;
-	joinEol: boolean;
-	constructor({type="simple", label=undefined, href=undefined, joinEol=false}={}) {
-		super('g');
-		this.width = 20;
-		this.height = 0;
-		this.up = 10;
-		this.down = 10;
-		this.type = type;
-		this.label = label;
-		this.href = href;
-		this.joinEol = joinEol;
+export class End extends TerminusNode {
+	constructor(type: string="simple", label: string=undefined, href: string=undefined, connectToMainline:boolean=true) {
+		super(type, label, undefined, href, connectToMainline);
+		this.width = 20; // restore it back
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "end";
 		}
 	}
-	format(x?,y?) {
+	format(x?: number,y?: number, width?: number): FakeSVG {
+		x = this.formatSides(x, y, width);
 		let path = new Path(x, y-10);
 		if (this.type === "complex") {
-			path.downFn(20)
-				.m(0, -10)
-				.right(this.width)
-				.addTo(this);
+			path.attrs.d = 'M '+x+' '+y+' h 20 m 0 -10 v 20';
 		} else {
-			path.downFn(20)
-				.m(10, -20)
-				.downFn(20)
-				.m(-10, -10)
-				.right(this.width)
-				.addTo(this);
+			path.attrs.d = 'M '+x+' '+y+' h 20 m -10 -10 v 20 m 10 -20 v 20';
 		}
-		if(this.label) {
-			var text = new FakeSVG('text', {x:x, y:y-15, style:"text-anchor:start"}, this.label).addTo(this);
-			if(this.href)
-				new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-			else
-				text.addTo(this);
-			if(this.title)
-				new FakeSVG('title', {}, []).addTo(this);
-		}
-		return this;
+		path.addTo(this);
+		return super.format(x, y, width);
 	} 
-}
-funcs.End = (...args)=>new End(...args);
 
-export class Terminal extends FakeSVG {
-	text: string;
-	href: any;
-	title: any;
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	needsSpace: boolean;
-	constructor(text: string, {href=undefined, title=undefined}={}) {
-		super('g', {'class': 'terminal'});
-		this.text = ""+text;
-		this.href = href;
-		this.title = title;
-		this.width = this.text.length * Options.CHAR_WIDTH + 20; /* Assume that each char is .5em, and that the em is 16px */
+	protected formatTextElementAttr(x: number, y: number): object {
+		return { x: x, y: y - 15, style: "text-anchor:start" }; // "text-anchor:end"
+	}
+
+	isExitSupported(): boolean {
+		if (this.label)
+		console.log(`${this.label} isExitSupported = ${this.connectToMainline}`);
+		return this.connectToMainline;
+	}
+}
+funcs.End = (t: string, l: string, h: string, c: boolean)=>new End(t, l, h, c);
+
+class NonTerminusNode extends LabelTitleLinkControl {
+	constructor(label: string, public title?: string, href?: string, attr?: object) {
+		super(label, title, href, attr);
+		this.initialiseSizing();
+	}
+
+	initialiseSizing() {
+		this.width = this.label.length * Options.CHAR_WIDTH + 20; /* Assume that each char is .5em, and that the em is 16px */
 		this.height = 0;
 		this.up = 11;
 		this.down = 11;
 		this.needsSpace = true;
+	}
+
+	protected formatLabelTitleLink(x: number, y: number, attr: object): FakeSVG {
+		var text = new FakeSVG('text', attr, this.label);
+		if (this.href)
+			new FakeSVG('a', { 'xlink:href': this.href }, [text]).addTo(this);
+		else
+			text.addTo(this);
+		if (this.title)
+			new FakeSVG('title', {}, this.title).addTo(this);
+		return this;
+	}
+}
+
+export class Terminal extends NonTerminusNode {
+	constructor(label: string, public title: string=undefined, href: string=undefined) {
+		super(label, title, href, {'class': 'terminal'});
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "terminal";
 		}
 	}
-	format(x?, y?, width?) {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
-		x += gaps[0];
-
+	format(x?: number,y?: number,width?: number): FakeSVG {
+		x = this.formatSides(x, y, width);
 		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down, rx:10, ry:10}).addTo(this);
-		var text = new FakeSVG('text', {x:x+this.width/2, y:y+4}, this.text);
-		if(this.href)
-			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
-			text.addTo(this);
-		if(this.title)
-			new FakeSVG('title', {}, [this.title]).addTo(this);
+		this.formatLabelTitleLink(x, y, {x: x + this.width / 2, y: y + 4 });
 		return this;
 	}
 }
-funcs.Terminal = (t, o)=>new Terminal(t, o);
+funcs.Terminal = (l: string, t: string, h: string)=>new Terminal(l, t, h);
 
-
-export class NonTerminal extends FakeSVG {
-	text: string;
-	href: any;
-	title: any;
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	needsSpace: boolean;
-	constructor(text, {href=undefined, title=undefined}={}) {
-		super('g', {'class': 'non-terminal'});
-		this.text = ""+text;
-		this.href = href;
-		this.title = title;
-		this.width = this.text.length * Options.CHAR_WIDTH + 20;
-		this.height = 0;
-		this.up = 11;
-		this.down = 11;
-		this.needsSpace = true;
+export class NonTerminal extends NonTerminusNode {
+	constructor(label: string, public title: string=undefined, href: string=undefined) {
+		super(label, title, href, {'class': 'non-terminal'});
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "nonterminal";
 		}
 	}
-	format(x?, y?, width?) {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
-		x += gaps[0];
-
+	format(x?: number,y?: number,width?: number): FakeSVG {
+		x = this.formatSides(x, y, width);
 		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down}).addTo(this);
-		var text = new FakeSVG('text', {x:x+this.width/2, y:y+4}, this.text);
-		if(this.href)
-			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
-			text.addTo(this);
-		if(this.title)
-			new FakeSVG('title', {}, [this.title]).addTo(this);
+		this.formatLabelTitleLink(x, y, {x: x + this.width / 2, y: y + 4});
 		return this;
 	}
 }
-funcs.NonTerminal = (t, o)=>new NonTerminal(t, o);
+funcs.NonTerminal = (l: string, t: string, h: string)=>new NonTerminal(l, t, h);
 
 
-export class Comment extends FakeSVG {
-	text: string;
-	href: any;
-	title: any;
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	needsSpace: boolean;
-	constructor(text, {href=undefined, title=undefined}={}) {
-		super('g');
-		this.text = ""+text;
-		this.href = href;
-		this.title = title;
-		this.width = this.text.length * Options.COMMENT_CHAR_WIDTH + 10;
-		this.height = 0;
-		this.up = 11;
-		this.down = 11;
-		this.needsSpace = true;
+export class Comment extends NonTerminusNode {
+	constructor(label: string, public title: string=undefined, href: string=undefined) {
+		super(label, title, href);
+		// comments have different font/sizing ie. override initialiseSizing::width
+		this.width = this.label.length * Options.COMMENT_CHAR_WIDTH + 10;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "comment";
 		}
 	}
-	format(x?, y?, width?) {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		new Path(x,y).h(gaps[0]).addTo(this);
-		new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
-		x += gaps[0];
 
-		var text = new FakeSVG('text', {x:x+this.width/2, y:y+5, class:'comment'}, this.text);
-		if(this.href)
-			new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
-		else
-			text.addTo(this);
-		if(this.title)
-			new FakeSVG('title', {}, this.title).addTo(this);
+	format(x?: number,y?: number,width?: number): FakeSVG {
+		// Hook up the two sides if this is narrower than its stated width.
+		x = this.formatSides(x, y, width, this.height);
+		this.formatLabelTitleLink(x, y, {x:x+this.width/2, y:y+5, class:'comment'});
 		return this;
 	}
 }
-funcs.Comment = (t, o)=>new Comment(t, o);
+funcs.Comment = (l: string, t: string, h: string)=>new Comment(l, t, h);
 
 
-export class Skip extends FakeSVG {
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	needsSpace: boolean;
+export class Skip extends Control {
 	constructor() {
 		super('g');
-		this.width = 0;
-		this.height = 0;
-		this.up = 0;
-		this.down = 0;
 		this.needsSpace = false;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "skip";
 		}
 	}
-	format(x?, y?, width?) {
+	format(x?: number, y?: number, width?: number): FakeSVG {
 		new Path(x,y).right(width).addTo(this);
 		return this;
 	}
@@ -1407,13 +1694,8 @@ export class Skip extends FakeSVG {
 funcs.Skip = ()=>new Skip();
 
 
-export class Block extends FakeSVG {
-	width: number;
-	height: number;
-	up: number;
-	down: number;
-	needsSpace: boolean;
-	constructor({width=50, up=15, height=25, down=15, needsSpace=true}={}) {
+export class Block extends Control {
+	constructor(width=50, up=15, height=25, down=15, needsSpace=true) {
 		super('g');
 		this.width = width;
 		this.height = height;
@@ -1425,13 +1707,13 @@ export class Block extends FakeSVG {
 			this.attrs['data-type'] = "block";
 		}
 	}
-	format(x?, y?, width?) {
+
+	format(x?:number, y?: number, width?: number) {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
 		new Path(x+gaps[0]+this.width,y).h(gaps[1]).addTo(this);
 		x += gaps[0];
-
 		new FakeSVG('rect', {x:x, y:y-this.up, width:this.width, height:this.up+this.height+this.down}).addTo(this);
 		return this;
 	}
@@ -1439,13 +1721,13 @@ export class Block extends FakeSVG {
 funcs.Block = (...args)=>new Block(...args);
 
 
-function unnull(...args) {
+function unnull(...args: any) {
 	// Return the first value that isn't undefined.
 	// More correct than `v1 || v2 || v3` because falsey values will be returned.
 	return args.reduce(function(sofar, x) { return sofar !== undefined ? sofar : x; });
 }
 
-function determineGaps(outer, inner) {
+function determineGaps(outer: number, inner: number): number[] {
 	var diff = outer - inner;
 	switch(Options.INTERNAL_ALIGNMENT) {
 		case 'left': return [0, diff];
@@ -1454,8 +1736,8 @@ function determineGaps(outer, inner) {
 	}
 }
 
-function wrapString(value) {
-		return value instanceof FakeSVG ? value : new Terminal(""+value);
+function makeTerminalIfString(value: Component|string):Component {
+		return value instanceof Component ? value : new Terminal(""+value);
 }
 
 function sum(iter, func) {
@@ -1468,7 +1750,7 @@ function max(iter, func) {
 	return Math.max.apply(null, iter.map(func));
 }
 
-function SVG(name, attrs?: object, text?: string) {
+function SVG(name, attrs?: object, text?: string): any {
 	attrs = attrs || {};
 	text = text || '';
 	var el = document.createElementNS("http://www.w3.org/2000/svg",name);

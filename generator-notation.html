@@ -1,0 +1,88 @@
+<!doctype html>
+<title>Railroad Diagram Generator</title>
+<link href="railroad-diagrams.css" rel=stylesheet>
+
+<textarea class='input'>
+	x y z
+</textarea>
+<div class='output-image'></div>
+<textarea class='output-text' readonly></textarea>
+
+<script> var exports = {}; </script>
+<script type=module>
+// <script>
+// import rr, * as rrClass from "./out/railroad.js";
+// import rr, * as rrClass from "./out/railroad.js";
+import DiagramParser from "./out/railroad-ascii-parser.js";
+// Object.assign(window, rr);
+console.log(DiagramParser);
+
+const find = document.querySelector.bind(document);
+
+find('.input').addEventListener('input', e=>process(e.target.value), false);
+document.addEventListener('DOMContentLoaded', initialProcess, false);
+window.addEventListener('hashchange', hashProcess, false);
+
+function initialProcess() {
+	if(location.hash && location.hash.length > 1) {
+		const code = decodeURIComponent(location.hash.substr(1));
+		const input = find('.input');
+		input.textContent = code;
+	}
+	process();
+}
+
+function hashProcess() {
+	if(location.hash && location.hash.length > 1) {
+		const code = decodeURIComponent(location.hash.substr(1));
+		const input = find('.input');
+		if(input.value != code) {
+			input.textContent = code;
+			process(code);
+		}
+	}
+}
+
+function process(input) {
+	let result;
+	if(!input) input = find('.input').value;
+	try {
+		// var result = eval(input).format();
+		let parser = new DiagramParser(input);
+		let x = parser.parse();
+		result = x.format();
+		location.hash = "#" + encodeURIComponent(input);
+	} catch (e) {
+		find('.output-text').textContent = "Invalid input.\n" + e
+		throw e;
+	}
+	find('.output-image').innerHTML = '';
+	result.addTo(find('.output-image'));
+	find('.output-text').textContent = result;
+}
+</script>
+
+<style>
+@media all and (min-width: 400px) {
+	html, body { margin: 0; padding: 0; height: 100%; }
+	body {
+		display: grid;
+		grid-template:
+			"input  code" 1fr
+			"output expl" 1fr
+			/ 1fr   1fr;
+	}
+}
+.input {
+	grid-area: input;
+}
+.output-text {
+	grid-area: code;
+}
+.output-image {
+	grid-area: output;
+}
+.explanation {
+	grid-area: expl;
+}
+</style>
