@@ -1,42 +1,42 @@
-svg.railroad-diagram {
+svg.tracks {
     background-color: hsl(30,20%,95%);
 }
-svg.railroad-diagram path {
+svg.tracks path {
     stroke-width: 3;
     stroke: black;
     fill: rgba(0,0,0,0);
 }
-svg.railroad-diagram text {
+svg.tracks text {
     font: bold 14px monospace;
     text-anchor: middle;
     white-space: pre;
 }
-svg.railroad-diagram text.diagram-text {
+svg.tracks text.diagram-text {
     font-size: 12px;
 }
-svg.railroad-diagram text.diagram-arrow {
+svg.tracks text.diagram-arrow {
     font-size: 16px;
 }
-svg.railroad-diagram text.label {
+svg.tracks text.label {
     text-anchor: start;
 }
-svg.railroad-diagram text.comment {
+svg.tracks text.comment {
     font: italic 12px monospace;
 }
-svg.railroad-diagram g.non-terminal text {
+svg.tracks g.non-terminal text {
     /*font-style: italic;*/
 }
-svg.railroad-diagram rect {
+svg.tracks rect {
     stroke-width: 3;
     stroke: black;
     fill: hsl(120,100%,90%);
 }
-svg.railroad-diagram path.diagram-text {
+svg.tracks path.diagram-text {
     stroke-width: 3;
     stroke: black;
     fill: white;
     cursor: help;
 }
-svg.railroad-diagram g.diagram-text:hover path.diagram-text {
+svg.tracks g.diagram-text:hover path.diagram-text {
     fill: #eee;
 }
