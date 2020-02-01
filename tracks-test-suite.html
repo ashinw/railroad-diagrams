@@ -12,11 +12,11 @@ code {
 	white-space: pre; 
 }
 </style>
-<link rel='stylesheet' href='railroad-diagrams.css'>
+<link rel='stylesheet' href='tracks.css'>
 
 <head>
 <script type=module>
-import DiagramParser from "./out/tracks-parser.js";
+import ParserManager from "./out/tracks-parser.js";
 
 let fixture = [
 	{
@@ -288,7 +288,7 @@ function renderTestCase(divGrp, groupCode, testNo, test) {
 }
 
 function renderTestResult(divTest, notation) {
-	let parser = new DiagramParser(notation);
+	let parser = new ParserManager(notation);
 	let diag = parser.parse();
 	let divDiag = document.createElement("div");
 	divTest.appendChild(divDiag);

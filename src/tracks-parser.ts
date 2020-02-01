@@ -39,22 +39,13 @@ pragmas:
 	@esc<char>	set character
  */
 
- /*
+import funcs, {Options} from './tracks-model.js';
+import * as tracks from './tracks-model.js';
 
-	Diagramable, Diagram, ConceptDiagram,
-	Sequence, Stack, OptionalSequence, AlternatingSequence,
-	Choice, HorizontalChoice, MultipleChoice,
-	Optional, OneOrMore, ZeroOrMore,
-	Start, End, Terminal, NonTerminal, Comment, Skip, Block, Component
-
-
- */
-import funcs, {Options} from './railroad.js';
-import * as rrd from './railroad.js';
-
-// function casts
+// function casts to support @jsc pragma
+let TrackDiagram = (...a) => funcs.TrackDiagram(...a);
 let Diagram = (...a) => funcs.Diagram(...a);
-let ConceptDiagram = (...a) => funcs.ConceptDiagram(...a);
+let ComplexDiagram = (...a) => funcs.ComplexDiagram(...a);
 let Sequence = (...a) => funcs.Sequence(...a);
 let Stack = (...a) => funcs.Stack(...a);
 let OptionalSequence = (...a) => funcs.OptionalSequence(...a);
@@ -74,7 +65,7 @@ let Skip = (...a) => funcs.Skip(...a);
 let Block = (...a) => funcs.Block(...a);
 
 
-export class DiagramParser {
+export class ParserManager {
 	context = new ParserReadContext();
 	parsers = new Array<ComponentParser>();
 	tokenStack = [];
@@ -86,7 +77,7 @@ export class DiagramParser {
 		this.reorderParsers();
 	}
 
-	parse(): rrd.Diagramable {
+	parse(): tracks.Diagramable {
 		let items = [];
 		while (this.context.hasMore()) {
 			let item = this.parseNextComponent(undefined);
@@ -94,11 +85,11 @@ export class DiagramParser {
 				items.push(item);
 			this.context.skipWhitespace();
 		}
-		let diag: rrd.Diagramable;
+		let diag: tracks.Diagramable;
 		if (items.length === 1 && items[0].implementsDiagramable)
 			diag = items[0];
 		else
-			diag = this.targetTracksDiagram ? new rrd.TracksDiagram(...items): new rrd.Diagram(...items);
+			diag = this.targetTracksDiagram ? new tracks.TracksDiagram(...items): new tracks.Diagram(...items);
 		return diag;
 	}
 
@@ -137,6 +128,10 @@ export class DiagramParser {
 		this.tokenStack.push(tokenisedItem);
 	}
 
+	registerParser(parser: ComponentParser) {
+		this.parsers.push(parser);
+	}
+
 	protected loadParsers() {
 		// load container parsers 1st
 		this.registerParser(new SequenceParser(this));
@@ -155,22 +150,16 @@ export class DiagramParser {
 		this.registerParser(new PragmaParser(this));
 	}
 
-	protected registerParser(parser: ComponentParser) {
-		this.parsers.push(parser);
-	}
-
 	protected reorderParsers() {
 	}
 }
 
-export default DiagramParser;
+export default ParserManager;
 
 
 class ParserReadContext {
 	// Pragmas
 	escapeChar = '\\';			// modified by @esc <char> 
-	// toggled on|off by @dbg (see Option.DEBUG)
-	// toggled on|off by @arw (se Options.SHOW_ARROW)
 	source = "";
 	pos = 0;
 
@@ -241,8 +230,6 @@ class ParserReadContext {
 		let foundPos = -1;
 		let match = undefined;
 		while (true) {
-			// criteria.lastIndex = startFrom;
-			// match = src.match(criteria);
 			criteria.lastIndex = 0;
 			let remainder = src.substr(startFrom);
 			match = remainder.match(criteria);
@@ -295,7 +282,7 @@ class ParserState {
 // Use ParserState for storage!
 abstract class ComponentParser {
 	ctx: ParserReadContext = this.controller.context;
-	constructor(public controller: DiagramParser) {
+	constructor(public controller: ParserManager) {
 	}
 
 	abstract canParse(): ParserState;
@@ -377,7 +364,7 @@ class SequenceParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		state.attr.closed = false;
@@ -399,17 +386,17 @@ class SequenceParser extends ComponentParser {
 		return this.constructModel(state);
 	}
 
-	private constructModel(state: ParserState): rrd.Component {
-		let rrdType: any = undefined;
+	private constructModel(state: ParserState): tracks.Component {
+		let trkType: any = undefined;
 		if (state.attr.type === 0)
-			rrdType = new rrd.Sequence(...state.items);
+			trkType = new tracks.Sequence(...state.items);
 		else if (state.attr.type === 1)
-			rrdType = new rrd.Stack(...state.items);
+			trkType = new tracks.Stack(...state.items);
 		else if (state.attr.type === 2)
-			rrdType = new rrd.AlternatingSequence(...state.items);
+			trkType = new tracks.AlternatingSequence(...state.items);
 		else
-			rrdType = new rrd.OptionalSequence(...state.items);
-		return rrdType;
+			trkType = new tracks.OptionalSequence(...state.items);
+		return trkType;
 	}
 }
 
@@ -433,7 +420,7 @@ class ChoiceParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		state.attr.closed = false;
@@ -487,19 +474,19 @@ class ChoiceParser extends ComponentParser {
 		state.items[state.attr.optionsCount - 1] = [];
 	}
 
-	private constructModel(state: ParserState): rrd.Component {
-		let rrdType: any = undefined;
+	private constructModel(state: ParserState): tracks.Component {
+		let trkType: any = undefined;
 		let normal = state.attr.preferIndex === -1 ? 0 : state.attr.preferIndex;
 		this.finaliseItemsForModel(state);
 		if (state.attr.type === 0)
-			rrdType = new rrd.Choice(normal, ...state.items);
+			trkType = new tracks.Choice(normal, ...state.items);
 		else if (state.attr.type === 1)
-			rrdType = new rrd.HorizontalChoice(...state.items);
+			trkType = new tracks.HorizontalChoice(...state.items);
 		else if (state.attr.type >= 2) {
 			let type = state.attr.type === 2 ? "all" : "any";
-			rrdType = new rrd.MultipleChoice(normal, type, ...state.items);
+			trkType = new tracks.MultipleChoice(normal, type, ...state.items);
 		}
-		return rrdType;
+		return trkType;
 	}
 
 	private finaliseItemsForModel(state: ParserState): void {
@@ -510,7 +497,7 @@ class ChoiceParser extends ComponentParser {
 			else if (state.items[i].length === 1)
 				state.items[i] = state.items[i][0];
 			else {
-				state.items[i] = new rrd.Sequence(...state.items[i]);
+				state.items[i] = new tracks.Sequence(...state.items[i]);
 			}
 			if (state.items[i])
 				revision.push(state.items[i]);
@@ -532,10 +519,10 @@ class CommentParser extends TitleLinkComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		let rrdType = new rrd.Comment(titleLinkArr[0], undefined, titleLinkArr[1]);
-		return rrdType;
+		let trkType = new tracks.Comment(titleLinkArr[0], undefined, titleLinkArr[1]);
+		return trkType;
 	}
 }
 
@@ -552,10 +539,10 @@ class NonTerminalParser extends TitleLinkComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		let rrdType = new rrd.NonTerminal(titleLinkArr[0], undefined, titleLinkArr[1]);
-		return rrdType;
+		let trkType = new tracks.NonTerminal(titleLinkArr[0], undefined, titleLinkArr[1]);
+		return trkType;
 	}
 }
 
@@ -572,10 +559,10 @@ class TerminalParser extends TitleLinkComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
-		let rrdType = new rrd.Terminal(titleLinkArr[0], undefined, titleLinkArr[1]);
-		return rrdType;
+		let trkType = new tracks.Terminal(titleLinkArr[0], undefined, titleLinkArr[1]);
+		return trkType;
 	}
 }
 
@@ -592,12 +579,12 @@ export class StartParser extends TitleLinkComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		let titleLinkArr = super.readUntilClosingToken(state);
 		state.attr.connectToMainline = (state.openSyntax.charAt(0) === "+");
 		state.attr.type = state.openSyntax.endsWith("=[|") ? "simple" : "complex";
-		let rrdType = new rrd.Start(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
-		return rrdType;
+		let trkType = new tracks.Start(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
+		return trkType;
 	}
 }
 
@@ -614,12 +601,12 @@ export class EndParser extends TitleLinkComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		let titleLinkArr = super.readUntilClosingToken(state, EndParser.REG_EX);
 		state.attr.connectToMainline = (state.closeSyntax.charAt(state.closeSyntax.length - 1) === "+");
 		state.attr.type = state.closeSyntax.startsWith("|]=") ? "simple" : "complex";
-		let rrdType = new rrd.End(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
-		return rrdType;
+		let trkType = new tracks.End(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
+		return trkType;
 	}
 }
 
@@ -635,9 +622,9 @@ export class SkipParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.ctx.readIn(SkipParser.OPEN.length);
-		return new rrd.Skip();
+		return new tracks.Skip();
 	}
 }
 
@@ -653,9 +640,9 @@ export class BlockParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.ctx.readIn(BlockParser.OPEN.length);
-		return new rrd.Block();
+		return new tracks.Block();
 	}
 }
 
@@ -673,7 +660,7 @@ class LiteralNonTerminalParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.controller.addToTokenisedStack(state);
 		let regEx = /([a-zA-Z0-9_.-]+)/g;
 		regEx.lastIndex = this.ctx.pos;
@@ -685,8 +672,8 @@ class LiteralNonTerminalParser extends ComponentParser {
 			this.ctx.readIn(match[1].length);
 		} else
 			throw new Error(`Illegal argument: [a-zA-Z0-9_.-]...[a-zA-Z0-9_.-] - ${state.operationName} supports only standard characterset for naming`);
-		let rrdType = new rrd.NonTerminal(state.attr.name);
-		return rrdType;
+		let trkType = new tracks.NonTerminal(state.attr.name);
+		return trkType;
 	}
 }
 
@@ -706,7 +693,7 @@ class OptionalParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		this.ctx.skipWhitespace();
@@ -733,9 +720,9 @@ class OptionalParser extends ComponentParser {
 			throw new Error(`Invalid state: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} extended an operand`);
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.operationName, state.closeSyntax, state.operationName);
-		let item = state.items.length === 1 ? state.items[0] : new rrd.Sequence(...state.items);
-		let rrdType = new rrd.Optional(item, state.attr.preferIndex === 0 ? "skip" : undefined);
-		return rrdType;
+		let item = state.items.length === 1 ? state.items[0] : new tracks.Sequence(...state.items);
+		let trkType = new tracks.Optional(item, state.attr.preferIndex === 0 ? "skip" : undefined);
+		return trkType;
 	}
 }
 
@@ -756,7 +743,7 @@ class RepeatParser extends ComponentParser {
 		return ret;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		this.ctx.skipWhitespace();
@@ -793,15 +780,15 @@ class RepeatParser extends ComponentParser {
 		return this.constructModel(state);
 	}
 
-	private constructModel(state: ParserState): rrd.Component {
-		let item = state.items[0].length === 1 ? state.items[0][0] : new rrd.Sequence(...state.items[0]);
+	private constructModel(state: ParserState): tracks.Component {
+		let item = state.items[0].length === 1 ? state.items[0][0] : new tracks.Sequence(...state.items[0]);
 		let rep = undefined;
 		if (state.items[1].length === 1)
 			rep = state.items[1][0]
 		else if (state.items[1].length > 1)
-			rep = new rrd.Sequence(...state.items[1]);
-		let rrdType = new rrd.OneOrMore(item, rep, state.attr.showArrow);
-		return rrdType;
+			rep = new tracks.Sequence(...state.items[1]);
+		let trkType = new tracks.OneOrMore(item, rep, state.attr.showArrow);
+		return trkType;
 	}
 
 	private handleLowerDelimiter(state: ParserState) {
@@ -831,7 +818,7 @@ class PragmaParser extends ComponentParser {
 		return state;
 	}
 
-	parse(state: ParserState): rrd.Component {
+	parse(state: ParserState): tracks.Component {
 		this.controller.addToTokenisedStack(state);
 		this.ctx.readIn(state.openSyntax.length);
 		let ret = undefined;
@@ -849,7 +836,7 @@ class PragmaParser extends ComponentParser {
 		return ret;
 	}
 
-	parseJavascriptCode(state: ParserState): rrd.Component {
+	parseJavascriptCode(state: ParserState): tracks.Component {
 		state.closeSyntax = state.openSyntax;
 		let pos = this.ctx.source.indexOf("@jsc", this.ctx.pos);
 		if (pos === -1)

@@ -16,7 +16,7 @@ I would appreciate attribution, but that is not required by the license.
 // Export function versions of all the constructors.
 // Each class will add itself to this object.
 const funcs = {
-	ConceptDiagram: undefined,
+	TrackDiagram: undefined,
 	Diagram: undefined,
 	ComplexDiagram: undefined,
 	Sequence: undefined,
@@ -504,7 +504,7 @@ export class TracksDiagram extends SequenceableContainer implements Diagramable 
 		return super.toString();
 	}	
 } 
-funcs.ConceptDiagram = (...args)=>new TracksDiagram(...args);
+funcs.TrackDiagram = (...args)=>new TracksDiagram(...args);
 
 
 export class Diagram extends TracksDiagram {
@@ -1547,7 +1547,7 @@ class LabelTitleLinkControl extends Control {
 
 
 class TerminusNode extends LabelTitleLinkControl {
-	constructor(public type: string="complex", label?: string, title?: string, href?: string, public connectToMainline: boolean = true) {
+	constructor(public type: string="complex", label?: string, title?: string, href?: string, public connected: boolean = true) {
 		super(label, title, href);
 		this.width = 20;
 		this.height = 0;
@@ -1580,8 +1580,8 @@ class TerminusNode extends LabelTitleLinkControl {
 
 
 export class Start extends TerminusNode {
-	constructor(type: string="simple", label: string=undefined, href: string=undefined, connectToMainline:boolean=true) {
-		super(type, label, undefined, href, connectToMainline);
+	constructor(type: string="simple", label: string=undefined, href: string=undefined, connected:boolean=true) {
+		super(type, label, undefined, href, connected);
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "start";
@@ -1608,15 +1608,15 @@ export class Start extends TerminusNode {
 	}
 
 	isEntrySupported(): boolean {
-		return this.connectToMainline;
+		return this.connected;
 	}
 }
 funcs.Start = (...args)=>new Start(...args);
 
 
 export class End extends TerminusNode {
-	constructor(type: string="simple", label: string=undefined, href: string=undefined, connectToMainline:boolean=true) {
-		super(type, label, undefined, href, connectToMainline);
+	constructor(type: string="simple", label: string=undefined, href: string=undefined, connected:boolean=true) {
+		super(type, label, undefined, href, connected);
 		this.width = 20; // restore it back
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
@@ -1640,9 +1640,7 @@ export class End extends TerminusNode {
 	}
 
 	isExitSupported(): boolean {
-		if (this.label)
-		console.log(`${this.label} isExitSupported = ${this.connectToMainline}`);
-		return this.connectToMainline;
+		return this.connected;
 	}
 }
 funcs.End = (...args)=>new End(...args);

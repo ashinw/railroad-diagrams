@@ -1,6 +1,6 @@
 <!doctype html>
 <title>Railroad Diagram Generator</title>
-<link href="railroad-diagrams.css" rel=stylesheet>
+<link href="tracks.css" rel=stylesheet>
 
 <textarea class='input'>
 	x y z
@@ -9,7 +9,7 @@
 <textarea class='output-text' readonly></textarea>
 
 <script type=module>
-import DiagramParser from "./out/tracks-parser.js";
+import ParserManager from "./out/tracks-parser.js";
 const find = document.querySelector.bind(document);
 
 find('.input').addEventListener('input', e=>process(e.target.value), false);
@@ -40,7 +40,7 @@ function process(input) {
 	let result;
 	if(!input) input = find('.input').value;
 	try {
-		let parser = new DiagramParser(input);
+		let parser = new ParserManager(input);
 		let x = parser.parse();
 		result = x.format();
 		location.hash = "#" + encodeURIComponent(input);
