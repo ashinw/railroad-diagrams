@@ -16,7 +16,7 @@ code {
 
 <head>
 <script type=module>
-import DiagramParser from "./out/railroad-ascii-parser.js";
+import DiagramParser from "./out/tracks-parser.js";
 
 let fixture = [
 	{
@@ -142,6 +142,68 @@ let fixture = [
 		]
 	},
 	{
+		name: "Railroad Diagrams test-suite",
+		code: "rrdts",
+		tests: [
+			["IDENT", `=[= ["-"] (?<"name-start char"> | escape ?) [:{(? <"name char">| escape ?)}] =]=`], 
+			["FUNCTION", `INDENT "("`], 
+			["AT-KEYWORD", `"@" INDENT`], 
+			["HASH", `"#" INDENT`], 
+			["STRING", `(? "\\"" [:{(? "not \\" or \\\\ " | escape ?)}] "\\""
+| 
+"'" [:{(? "not ' or \\\\ " | escape ?)}] "'"?)`],
+		["STRING w/ escape pragma", `@esc.
+(? "."" [:{(? "not ." or \\" | escape ?)}] ".""
+| 
+"'" [:{(? "not ' or \\" | escape ?)}] "'"?)`],
+			["URL", `(?"u"|"U"?)
+(?"r"|"R"?)
+(?"l"|"L"?)
+"("
+  (? 
+    [:WS]
+    |[:WS] STRING [:WS]
+    |[:WS] {(? <"not \\" ' WS or NPC"> | escape?)} [:WS]
+  ?)
+")"`], 
+		["NUMBER", `(?"+"|:~|"-"?)
+
+(?
+  {digit} "." {digit}
+  |{digit}
+  |"." {digit}
+?)
+
+[(?"e"|"E"?)(?"+"|:~|"-"?) {digit}]`], 
+			["DIMENSION", `NUMBER INDENT`], 
+			["PERCENTAGE", `NUMBER "%"`], 
+			["UNICODE-RANGE", `(?"U"|"u"?)
+
+(?
+  {<"hex digit">|/"1-6 times"/}
+  | [:{<"hex digit">|/"1-5 times"/}] {"?"| /"1 to (6-digits) times"/}
+  | {<"hex digit">|/"1-6 times"/} "-" {<"hex digit">|/"1-6 times"/}
+?)`], 
+			["COMMENT", `"/*" [:{<"anything but * followed by /">}]`], 
+			["CDO", `"<!--"`], 
+			["CDC", `"-->"`], 
+			["SQL", `
+<^
+<-"SELECT" ["DISTINCT"] (? "*" | {expression [:AS output_name]|","}?) 
+    "FROM" {from_item|","} 
+    [: "WHERE" condition] ->
+<-[:"GROUP_BY" expression] 
+    [:"HAVING" condition] 
+      [:(?"UNION"|"INTERSECT"|"EXCEPT"?) [:"ALL"] select] ->
+<- [:"ORDER BY" {expression (? ~|"ASC"|"DESC"?)|","}]
+     [:"LIMIT" (?count| "ALL"?)] [:"OFFSET" start [:"ROWS"]] ->
+^>`], 
+			["image() function", `(?"ltr"|"rtl"?) <?(?<"<url>">|<"<string>">?)<"<color>">?>`], 
+			["glob pattern", `<@ {alphanumeric} "*" @>`], 
+			["CSS grid-auto-flow property", `(& "row"|:"column"|"dense" &)`], 
+		], 
+	},
+	{
 		name: "Pragma Group",
 		code: "pra",
 		tests: [
@@ -171,7 +233,7 @@ x y z
 	},
 	];
 
-let targetedGroups = [8];	// for faster pointed testing
+let targetedGroups = [];	// for faster pointed testing of individual groups
 
 function renderGroup(divFixture, group) {
 	let h2 = document.createElement("h2");

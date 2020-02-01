@@ -1,6 +1,6 @@
 /**
 
-Railroad ASCII notation guide
+Tracks notation guide
 
 [x]				    optional, normally omitted
 [:x]			    optional, normally included
@@ -223,12 +223,6 @@ class ParserReadContext {
 		return ret;
 	}
 
-	// escapedIndexOf(criteria: string, countAhead: number): number {
-	// 	let startFrom = this.pos + countAhead;
-	// 	let ret = this.escapedStringIndexOf(this.source, criteria, startFrom);
-	// 	return ret;
-	// }
-
 	escapedStringIndexOf(src: string, criteria: string, startFrom: number): number {
 		let foundPos = -1;
 		while (true) {
@@ -268,7 +262,18 @@ class ParserReadContext {
 	}
 
 	unescape(src: string): string {
-		return src.replace(this.escapeChar, '');
+		let doubleEsc = this.escapeChar + this.escapeChar;
+		let isDoubleEscaped = src.indexOf(doubleEsc) !== -1;
+		let hackRepl = undefined;
+		let ret: string = undefined;
+		if (isDoubleEscaped) {
+			hackRepl = "'^_:\\$\\:_^'".replace(this.escapeChar, "");
+			ret = src.replace(doubleEsc , hackRepl);
+		} 
+		ret = src.replace(this.escapeChar, "");
+		if (isDoubleEscaped)
+			ret = ret.replace(hackRepl, this.escapeChar);
+		return ret;
 	}
 }
 
@@ -329,8 +334,9 @@ abstract class TitleLinkComponentParser extends ComponentParser {
 			pos = this.ctx.escapedStringIndexOf(this.ctx.source, state.closeSyntax, this.ctx.pos);
 		if (pos === -1)
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
-		let comment = this.ctx.skipTo(pos);
-		let ret = this.finaliseState(comment, state);
+		let text = this.ctx.skipTo(pos);
+		text = this.ctx.unescape(text);
+		let ret = this.finaliseState(text, state);
 		this.ctx.readIn(state.closeSyntax.length);
 		return ret;
 	}
