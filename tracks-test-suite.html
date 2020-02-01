@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<style>
+body {
+	background-color: hsl(30,20%, 95%);
+}
+script {
+	display: block;
+	white-space: pre;
+	margin-top: -1em;
+}
+code { 
+	white-space: pre; 
+}
+</style>
+<link rel='stylesheet' href='railroad-diagrams.css'>
+
+<head>
+<script type=module>
+import DiagramParser from "./out/railroad-ascii-parser.js";
+
+let fixture = [
+	{
+		name: "Sequence Group",
+		code: "seq",
+		tests: [
+			["Implicit", `X Y Z`], 
+			["Explicit", `<- X Y Z ->`], 
+			["Alternating", `<@ x y @>`], 
+			["Optional", `<?x y z?>`], 
+		]
+	},
+	{
+		name: "Choice Group",
+		code: "cho",
+		tests: [
+			["Standard", `(?x|y|z?)`], 
+			["Preferred", `(?x|:y|z?)`], 
+			["Horizontal", `(- x|y|z -)`], 
+			["All Multi", `($ x|y|:z $)`], 
+			["Any Multi", `(& x|y|z &)`], 
+			["chg", `chg`], 
+		]
+	},
+	{
+		name: "Optional Group",
+		code: "opt",
+		tests: [
+			["Standard", `[x]`], 
+			["Preferred", `[:x]`], 
+			["Multi", `[:x y z]`], 
+		]
+	},
+	{
+		name: "Repeat Group",
+		code: "rep",
+		tests: [
+			["Standard", `{x}`], 
+			["Multi", `{x y z}`], 
+			["Multi w/ arrow", `{:x y}`], 
+			["Multi w/ return seperator", `{x|y z}`], 
+		]
+	},
+	{
+		name: "Optional/Repeat Combo Group",
+		code: "orc",
+		tests: [
+			["Multi combo w/ arrow", `[{:x y} z]`], 
+			["Multi combo w/ preference & arrow", `[:{:x y} z]`], 
+			["Multi combo w/ preference, arrow & return seperator", `[:{:i j | k} l]`], 
+		]
+	},
+	{
+		name: "Controls",
+		code: "con",
+		tests: [
+			["Skip/Express choice option", `(? ~ | x |/"use ~ for skip"/ ?)`], 
+			["Quoted Terminal", `x "terminal name" y`], 
+			["Quoted Terminal w/ URL", `x "terminal name w/ URL|http://google.com" y`], 
+			["Named Non-Terminal", `20 nextValidName _internal also-possible`], 
+			["Quoted Non-Terminal", `x <"$nonterminal w/ no character restrictions!"> y`], 
+			["Quoted Non-Terminal w/ URL", `c <"nonterminal name w/ URL|http://google.com"> y`], 
+			["Comment", `/"it would be better if mutli line was supported."/`], 
+			["Comment w/ escaping & URL", `/"url seperator is \\| terminator is \\"/ w/ URL|http://google.com"/`], 
+		]
+	},
+	{
+		name: "Terminus Controls",
+		code: "tco",
+		tests: [
+			["Disconnected start", `x =[= i j`], 
+			["Connected start", `x +=[= i j`], 
+			["Disconnected complex start", `x =[|= i j`], 
+			["Connected complex start", `x +=[|= i j`], 
+			["Disconnected labeled start", `x =[Go= i j`], 
+			["Connected labeled start", `x +=[Go= i j`], 
+			["Disconnected simple start w/ URL", `x =[Go|http://google.com= i j`], 
+			["Connected simple start w/ URL", `x +=[Go|http://google.com= i j`], 
+			["Disconnected complex start w/ URL", `x =[|Go|http://google.com= i j`], 
+			["Connected complex start w/ URL", `x +=[|Go|http://google.com= i j`], 
+			["Disconnected end", `x i =]= j`], 
+			["Connected end", `x i =]=+ j`], 
+			["Disconnected labeled end", `x i =Stop]= j`], 
+			["Connected labeled end", `x i =Stop]=+ j`], 
+			["Disconnected complex end", `x i =|]= j`], 
+			["Connected complex end", `x i =|]=+ j`], 
+			["Disconnected simple end w/ URL", `x i =Go|http://google.com]= j`], 
+			["Connected simple end w/ URL", `x i =Go|http://google.com]=+ j`], 
+			["Disconnected complex end w/ URL", `x i =Go|http://google.com|]= j`], 
+			["Connected complex end w/ URL", `x i =Go|http://google.com|]=+ j`], 
+		]
+	},
+	{
+		name: "Start/Stop line usage Group",
+		code: "orc",
+		tests: [
+			["Lines: Long optional sequence", `AA [<- a b c d e f g ->] BB `], 
+			["Lines: |a-b-e-f| OR |a-c-d| e-f| OR |a |x-e-f|", `a (?b|c d =|]=|=[|= x?) e f`], 
+			["Lines: |a-b| m |x-y| x-d|", `<- a b =]= m =[= x y =]= c d ->`], 
+			["Lines: stack> |a-b| m |x-y| x-d|", `<^ a b =]= m =[= x y =]= c d ^>`], 
+			["Lines: optional> |a-b| m |x-y| x-d|", `<? a b =]= m =[= x y =]= c d ?>`], 
+			["Lines: altern 1> |a-b| 2> m |x-y| c-d-1", `<@ <- =[= a b =]= -> <- m =[= x y =]= c d -> @>`], 
+			["Lines: choice> ", `AA (? =[= a b =]= | m =[= x y =]= c d ?) BB`], 
+			["Lines: standard sequence connected w/ labeled terminus", `<- AA +=[sAB= a b =eAB]=+ BB ->`], 
+			["Lines: standard sequence disconnected w/ labeled terminus", `<- AA =[sAB= a b =eAB]= BB ->`], 
+			["Lines: standard sequence connected with adjacent sequences w/ labeled terminus", `<- AA -> <- +=[sAB= a b =eAB]=+ -> <- BB ->`], 
+			["Lines: standard sequence disconnected with adjacent sequences w/ labeled terminus", `<- AA -> <- =[sAB= a b =eAB]= -> <- BB ->`], 
+			["Lines: stack sequence connected w/ labeled terminus", `<^ AA +=[sAB= a b =eAB]=+ BB ^>`], 
+			["Lines: stack sequence disconnected w/ labeled terminus", `<^ AA =[sAB= a b =eAB]= BB ^>`], 
+			["Lines: stack sequence connected with adjacent sequences w/ labeled terminus", `<^ AA ^> <^ +=[sAB= a b =eAB]=+ ^> <^ BB ^>`], 
+			["Lines: stack sequence disconnected with adjacent sequences w/ labeled terminus", `<^ AA ^> <^ =[sAB= a b =eAB]= ^> <^ BB ^>`], 
+			["Lines: optional sequence connected w/ labeled terminus", `<? AA +=[sAB= a b =eAB]=+ BB ?>`], 
+			["Lines: optional sequence disconnected w/ labeled terminus", `<? AA =[sAB= a b =eAB]= BB ?>`], 
+			["Lines: optional sequence connected with adjacent sequences w/ labeled terminus", `<? AA ?> <? +=[sAB= a b =eAB]=+ ?> <? BB ?>`], 
+			["Lines: optional sequence disconnected with adjacent sequences w/ labeled terminus", `<? AA ?> <? =[sAB= a b =eAB]= ?> <? BB ?>`], 
+			["Lines: alternating sequence disconnected with adjacent sequences w/ labeled terminus", `<@ <- =[sAB= a b =eAB]= -> <- =[sAB= a b =eAB]= -> @>`], 
+			["Lines: alternating sequence connected with adjacent sequences w/ labeled terminus", `<@ <- =[sAB= a b =eAB]=+ -> <- +=[sAB= a b =eAB]= -> @>`], 
+			["Lines: standard choice with connected & disconnected w/ labeled terminus", `AA=]= (? =[sAB= a b =eAB]=|:c d| +=[= x y =]= z?) BB`], 
+			["Lines: elaborate standard choice with connected & disconnected w/ labeled terminus", `AA (? =[sAB= a b =eAB]=+ | +=[sAB= x y =eAB]= | =[=c d=]= | e ?) BB`], 
+			["Lines: elaborate horizontal choice with connected & disconnected w/ labeled terminus", `AA (- =[sAB= a b =eAB]=+ | +=[sAB= x y =eAB]= | =[=c d=]= | e -) BB`], 
+			["Lines: elaborate multi choice with connected & disconnected w/ labeled terminus", `AA ($ =[sAB= a b =eAB]=+ | +=[sAB= x y =eAB]= | =[=c d=]= | e $) BB`], 
+			["Lines: elaborate repeat with disconnected w/ labeled terminus", `AA {: =[sAB= a b =eAB]= | =[sAB= x y =eAB]= } BB`], 
+		]
+	},
+	{
+		name: "Pragma Group",
+		code: "pra",
+		tests: [
+			["Pragma JS code mixin", 
+`
+w
+@jsc
+// This example shows how jscode blocks are 1st class components and can be mixins
+Stack(
+	"AA",
+	Start("complex", "sAB"),
+		"a",
+		"b",
+		End(),
+		"BB",
+	)
+@jsc
+x y z
+@jsc
+	Optional("hello")
+@jsc	
+`, true], 
+			["Debug toggle retained for Tab Atkins Jr. (and others)", `@dbg "toggled on" @dbg "toggled off"`, true], 
+			["Tracks diagram with no default start|end ", `@trk notice no start or end line terminus`, true], 
+			["Escape character switching", `@esc! "changed" @esc* "changed again"`, true], 
+		]
+	},
+	];
+
+let targetedGroups = [8];	// for faster pointed testing
+
+function renderGroup(divFixture, group) {
+	let h2 = document.createElement("h2");
+	h2.id = group.code;
+	h2.innerHTML = group.name;
+	let divGrp = document.createElement("div");
+	divGrp.appendChild(h2);
+	renderTestSuite(divGrp, group.code, group.tests)
+	divFixture.appendChild(divGrp);
+}
+
+function renderTestSuite(divGrp, groupCode, tests) {
+	for (let i = 0; i < tests.length; i++) {
+		const test = tests[i];
+		renderTestCase(divGrp, groupCode, i, test);
+	}
+}
+
+function renderTestCase(divGrp, groupCode, testNo, test) {
+	let divTest = document.createElement("div");
+	divTest.id = `${groupCode}_${testNo}`;
+	let h3 = document.createElement("h3");
+	h3.innerHTML = test[0];
+	divTest.appendChild(h3);
+	let notation = test[1];
+	let escapedNotation = notation;
+	escapedNotation = escapedNotation.replace("<", "&lt;");
+	escapedNotation = escapedNotation.replace(">", "&gt;");
+	let divNotation = document.createElement("div");
+	divNotation.innerHTML = `
+<blockquote>
+<h4>Tracks notation:</h4>
+<code>
+	${escapedNotation}
+</code>
+</blockquote>`;
+	divTest.appendChild(divNotation);
+	divGrp.appendChild(divTest);
+	let hint = renderTestResult(divTest, notation);
+	if (test.length == 3) {
+		divNotation.innerHTML += `
+<br>
+<blockquote>
+<h4>Hint:</h4>	
+<pre>
+	<code>
+	${hint}
+	</code>
+</pre>
+</blockquote>`
+	}
+}
+
+function renderTestResult(divTest, notation) {
+	let parser = new DiagramParser(notation);
+	let diag = parser.parse();
+	let divDiag = document.createElement("div");
+	divTest.appendChild(divDiag);
+	diag.addTo(divDiag);		
+	return parser.prepareTroubleshootingHint();
+}
+
+let testOuput = document.getElementById("test_output");
+for (let i = 0; i < fixture.length; i++) {
+	if (targetedGroups.length > 0 && targetedGroups.indexOf(i) === -1)
+		continue;
+	const group = fixture[i];
+	renderGroup(testOuput, group);
+}
+</script>	
+</head>
+
+<body>
+	<h1>Tracks Notation Test Fixture</h1>
+	<div id="test_output">
+	</div>
+</body>

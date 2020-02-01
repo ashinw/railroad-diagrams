@@ -8,15 +8,14 @@
       "type": "chrome",
       "request": "launch",
       "name": "Launch Chrome",
-      "url": "file:///C:/win.DATA/prj/github/railroad-diagrams/rrdnl-example.html",
-      // "url": "file:///C:/win.DATA/prj/github/railroad-diagrams/helloweb.html",
-      "webRoot": "${workspaceFolder}"
+      "url": "http://127.0.0.1:8887/generator-notation.html",
+      "webRoot": "${workspaceFolder}" 
     },
     {
       "type": "node",
       "request": "launch",
       "name": "Launch Program",
-      "program": "${workspaceFolder}/test-parser.ts",
+      "program": "${workspaceFolder}/src/test-parser.ts",
       "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": ["${workspaceFolder}/out/**/*.js"],      
       "skipFiles": [

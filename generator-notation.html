@@ -8,15 +8,8 @@
 <div class='output-image'></div>
 <textarea class='output-text' readonly></textarea>
 
-<script> var exports = {}; </script>
 <script type=module>
-// <script>
-// import rr, * as rrClass from "./out/railroad.js";
-// import rr, * as rrClass from "./out/railroad.js";
 import DiagramParser from "./out/railroad-ascii-parser.js";
-// Object.assign(window, rr);
-console.log(DiagramParser);
-
 const find = document.querySelector.bind(document);
 
 find('.input').addEventListener('input', e=>process(e.target.value), false);
@@ -47,7 +40,6 @@ function process(input) {
 	let result;
 	if(!input) input = find('.input').value;
 	try {
-		// var result = eval(input).format();
 		let parser = new DiagramParser(input);
 		let x = parser.parse();
 		result = x.format();

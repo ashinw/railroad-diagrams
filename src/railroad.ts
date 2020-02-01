@@ -36,6 +36,7 @@ const funcs = {
 	Comment: undefined,
 	Skip: undefined,
 	Block: undefined,
+	generate: undefined,
 };
 export default funcs;
 
@@ -49,6 +50,7 @@ export const Options = {
 	CHAR_WIDTH: 8.5, // width of each monospace character. play until you find the right value for your font
 	COMMENT_CHAR_WIDTH: 7, // comments are in smaller text by default
 };
+
 
 export class FakeSVG {
 	children: any;
@@ -121,6 +123,7 @@ export class FakeSVG {
 		return str;
 	}
 }
+
 
 export class Path extends FakeSVG {
 	constructor(x: number,y:number) {
@@ -214,6 +217,7 @@ export class Path extends FakeSVG {
 	}
 }
 
+
 class LruCache<K, T> {
 	private values: Map<K, T> = new Map<K, T>();
 	private maxEntries: number = 20;
@@ -237,6 +241,7 @@ class LruCache<K, T> {
 		this.values.set(key, value);
 	}
 }	
+
 
 export abstract class Component extends FakeSVG {
 	private static CONNECTION_UPLINE_CACHE = new LruCache<Component, boolean>();
@@ -281,10 +286,13 @@ export abstract class Component extends FakeSVG {
 	}
 }
 
+
 interface Containable {
+	implementsContainable();
 	getDownlineComponent(childCtx: Component): Component;
 	getUplineComponent(childCtx: Component): Component;
 }
+
 
 abstract class Container extends Component implements Containable {
 	items: Component[];
@@ -295,12 +303,15 @@ abstract class Container extends Component implements Containable {
 		this.prepareComponentLinage(items);
 	}
 
+	implementsContainable() {}
+
 	prepareItemsPriorToLinage(items: (string|Component)[]): void {
 	}
 
 	protected prepareComponentLinage(items: (string|Component)[]): void {
 		this.items = items.map((val: string | Component, i: number, arr: (string | Component)[]) => {
 			let newVal: Component = makeTerminalIfString(val);
+			arr[i] = newVal;
 			newVal.parentContainer = this;
 			newVal.previous = (i === 0 ? undefined : arr[i-1]) as Component;
 			if (newVal.previous)
@@ -340,16 +351,21 @@ abstract class Container extends Component implements Containable {
 	}
 }
 
+
 interface Sequenceable {
+	implementsSequenceable();
 	// NB: threaded sequences (eg. alternating sequence) have a different
 	// isEntry|ExitSupported & Up|Down line acquisition strategy
 	isThreaded(): boolean;
 }
 
+
 class SequenceableContainer extends Container implements Sequenceable {
 	constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
 		super(items, tagName, attrs, text);
 	}
+
+	implementsSequenceable() {}
 
 	isThreaded(): boolean {
 		return false;
@@ -380,7 +396,10 @@ class SequenceableContainer extends Container implements Sequenceable {
 	}
 }
 
+
 export interface Diagramable {
+	implementsDiagramable();
+
 	getItems(): Component[];
 	isFormatted(): boolean;
 	refresh(): void;
@@ -389,13 +408,16 @@ export interface Diagramable {
 	toString(): any;
 }
 
-export class ConceptDiagram extends SequenceableContainer implements Diagramable {
+
+export class TracksDiagram extends SequenceableContainer implements Diagramable {
 	formatted: boolean = false;
 	constructor(...items) {
 		super(items, 'svg', {class: Options.DIAGRAM_CLASS}, undefined);
 		this.needsSpace = false;
 		this.refresh();
 	}
+
+	implementsDiagramable() {}
 
 	getItems(): Component[] {
 		return this.items;
@@ -482,10 +504,10 @@ export class ConceptDiagram extends SequenceableContainer implements Diagramable
 		return super.toString();
 	}	
 } 
-funcs.ConceptDiagram = (...args)=>new ConceptDiagram(...args);
+funcs.ConceptDiagram = (...args)=>new TracksDiagram(...args);
 
 
-export class Diagram extends ConceptDiagram {
+export class Diagram extends TracksDiagram {
 	prepareItemsPriorToLinage(items: (string|Component)[]): void {
 		if(!(items[0] instanceof Start)) {
 			items.unshift(new Start());
@@ -507,12 +529,17 @@ export class ComplexDiagram extends Diagram {
 }
 funcs.ComplexDiagram = (...args)=>new ComplexDiagram(...args);
 
+
 interface Conditionable {
+	implementsConditionable();
 	// consider using -2 for all, -1 for any, 0 - none, 1... for selection 
 	getDefaultIndex(): number;
 }
 
+
 interface Repeatable {
+	implementsRepeatable();
+
 	// services that likely require extension considerations
 	isThreaded(): boolean;
 	isExitSupported(): boolean;
@@ -520,8 +547,10 @@ interface Repeatable {
 	getUplineComponent(childCtx: Component): Component;
 }
 
+
 class Control extends Component {
 }
+
 
 export class Sequence extends SequenceableContainer implements Sequenceable {
 	constructor(...items: (string|Component)[]) {
@@ -574,6 +603,7 @@ export class Sequence extends SequenceableContainer implements Sequenceable {
 	}
 }
 funcs.Sequence = (...args)=>new Sequence(...args);
+
 
 export class Stack extends SequenceableContainer implements Sequenceable {
 	constructor(...items: (string|Component)[]) {
@@ -653,6 +683,7 @@ export class Stack extends SequenceableContainer implements Sequenceable {
 }
 funcs.Stack = (...args)=>new Stack(...args);
 
+
 export class OptionalSequence extends SequenceableContainer implements Sequenceable, Conditionable {
 	constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
@@ -689,6 +720,9 @@ export class OptionalSequence extends SequenceableContainer implements Sequencea
 			this.attrs['data-type'] = "optseq";
 		}
 	}
+
+	implementsSequenceable() {}
+	implementsConditionable() {}
 
 	getDefaultIndex(): number {
 		return -1;
@@ -808,6 +842,7 @@ export class OptionalSequence extends SequenceableContainer implements Sequencea
 	}
 }
 funcs.OptionalSequence = (...args)=>new OptionalSequence(...args);
+
 
 export class AlternatingSequence extends SequenceableContainer implements Sequenceable {
 	constructor(...items: (string|Component)[]) {
@@ -934,8 +969,11 @@ export class AlternatingSequence extends SequenceableContainer implements Sequen
 }
 funcs.AlternatingSequence = (...args)=>new AlternatingSequence(...args);
 
+
 abstract class ConditionableContainer extends Container implements Conditionable {
 	abstract getDefaultIndex(): number;
+
+	implementsConditionable() {}
 
 	isEntrySupported(): boolean {
 		for (let i = 0; i < this.items.length; i++) {
@@ -965,6 +1003,7 @@ abstract class ConditionableContainer extends Container implements Conditionable
 		return childCtx.parentContainer.previous; // go up a level and try parent's previous sibling
 	}
 }
+
 
 export class Choice extends ConditionableContainer implements Conditionable {
 	normal: number;
@@ -1077,6 +1116,7 @@ export class Choice extends ConditionableContainer implements Conditionable {
 	}
 }
 funcs.Choice = (n,...args)=>new Choice(n,...args);
+
 
 export class HorizontalChoice extends ConditionableContainer implements Conditionable {
 	_upperTrack: number;
@@ -1246,6 +1286,7 @@ export class HorizontalChoice extends ConditionableContainer implements Conditio
 }
 funcs.HorizontalChoice = (...args: any[])=>new HorizontalChoice(...args);
 
+
 export class MultipleChoice extends ConditionableContainer implements Conditionable {
 	normal: number;
 	type: any;
@@ -1375,7 +1416,8 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 		return this;
 	}
 }
-funcs.MultipleChoice = (n: number, t: string, ...args: any[])=>new MultipleChoice(n, t, ...args);
+funcs.MultipleChoice = (n: number, t: string, ...args)=>new MultipleChoice(n, t, ...args);
+
 
 export class Optional extends Choice implements Conditionable {
 	constructor(item: Component, skip: string|undefined) {
@@ -1389,6 +1431,7 @@ export class OneOrMore extends SequenceableContainer implements Repeatable {
 	item: Component;
 	rep: Component;
 	showArrow: boolean;
+
 	constructor(item: string|Component, rep: string|Component, showArrow=false) {
 		// super([makeTerminalIfString(item), makeTerminalIfString(rep || (new Skip()))], 'g', {}, undefined);
 		super([item, rep || (new Skip())], 'g', {}, undefined);
@@ -1405,6 +1448,8 @@ export class OneOrMore extends SequenceableContainer implements Repeatable {
 			this.attrs['data-type'] = "oneormore";
 		}
 	}
+
+	implementsRepeatable() {}
 
 	isThreaded(): boolean {
 		// only to extent that the return line may have optional nodes
@@ -1463,18 +1508,22 @@ export class OneOrMore extends SequenceableContainer implements Repeatable {
 		return this;
 	}
 }
-funcs.OneOrMore = (item: Component|string, rep: Component|string)=>new OneOrMore(item, rep);
+funcs.OneOrMore = (item: Component|string, rep: Component|string, arr: boolean)=>new OneOrMore(item, rep, arr);
+
 
 export class ZeroOrMore extends Optional implements Conditionable, Repeatable {
 	constructor(item: Component|string, rep: Component|string, skip: string|undefined) {
 		super(new OneOrMore(item, rep), skip);
 	}
 
+	implementsRepeatable() {}
+
 	isThreaded(): boolean {
 		return (<OneOrMore>(this.items[0])).isThreaded()
 	}
 }
 funcs.ZeroOrMore = (item: Component|string, rep: Component|string, skip: string|undefined)=>new ZeroOrMore(item, rep, skip);
+
 
 class LabelTitleLinkControl extends Control {
 	constructor(public label?: string, public title?: string, public href?: string, attrs?: object) {
@@ -1495,6 +1544,7 @@ class LabelTitleLinkControl extends Control {
 	return x;
 	}
 }
+
 
 class TerminusNode extends LabelTitleLinkControl {
 	constructor(public type: string="complex", label?: string, title?: string, href?: string, public connectToMainline: boolean = true) {
@@ -1528,6 +1578,7 @@ class TerminusNode extends LabelTitleLinkControl {
 	}
 }
 
+
 export class Start extends TerminusNode {
 	constructor(type: string="simple", label: string=undefined, href: string=undefined, connectToMainline:boolean=true) {
 		super(type, label, undefined, href, connectToMainline);
@@ -1560,7 +1611,8 @@ export class Start extends TerminusNode {
 		return this.connectToMainline;
 	}
 }
-funcs.Start = (t: string, l: string, h: string, c: boolean)=>new Start(t, l, h, c);
+funcs.Start = (...args)=>new Start(...args);
+
 
 export class End extends TerminusNode {
 	constructor(type: string="simple", label: string=undefined, href: string=undefined, connectToMainline:boolean=true) {
@@ -1593,7 +1645,8 @@ export class End extends TerminusNode {
 		return this.connectToMainline;
 	}
 }
-funcs.End = (t: string, l: string, h: string, c: boolean)=>new End(t, l, h, c);
+funcs.End = (...args)=>new End(...args);
+
 
 class NonTerminusNode extends LabelTitleLinkControl {
 	constructor(label: string, public title?: string, href?: string, attr?: object) {
@@ -1621,6 +1674,7 @@ class NonTerminusNode extends LabelTitleLinkControl {
 	}
 }
 
+
 export class Terminal extends NonTerminusNode {
 	constructor(label: string, public title: string=undefined, href: string=undefined) {
 		super(label, title, href, {'class': 'terminal'});
@@ -1636,7 +1690,8 @@ export class Terminal extends NonTerminusNode {
 		return this;
 	}
 }
-funcs.Terminal = (l: string, t: string, h: string)=>new Terminal(l, t, h);
+funcs.Terminal = (l, ...args)=>new Terminal(l, ...args);
+
 
 export class NonTerminal extends NonTerminusNode {
 	constructor(label: string, public title: string=undefined, href: string=undefined) {
@@ -1653,7 +1708,7 @@ export class NonTerminal extends NonTerminusNode {
 		return this;
 	}
 }
-funcs.NonTerminal = (l: string, t: string, h: string)=>new NonTerminal(l, t, h);
+funcs.NonTerminal = (l: string, ...args)=>new NonTerminal(l, ...args);
 
 
 export class Comment extends NonTerminusNode {
@@ -1674,7 +1729,7 @@ export class Comment extends NonTerminusNode {
 		return this;
 	}
 }
-funcs.Comment = (l: string, t: string, h: string)=>new Comment(l, t, h);
+funcs.Comment = (l: string, ...args)=>new Comment(l, ...args);
 
 
 export class Skip extends Control {

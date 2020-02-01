@@ -5,9 +5,9 @@
     "outDir": "out",
     "sourceMap": true,
   },
-  // "include": [
-  //   "src/**/*"
-  // ],  
+  "include": [
+    "src/**/*"
+  ],  
   "exclude": [
       "bak",
       "**/*.spec.ts"

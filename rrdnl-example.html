@@ -227,6 +227,36 @@ new DiagramParser(c_ex6).parse().addTo();
 	new DiagramParser(a_ex13).parse().addTo();
 </script>
 
+<h1 id=prag>Pragams</h1>
+<h2 id=aux_a8>Pragma JS code demarcation</h2>
+<script>
+	let a_ex13b = `
+	w
+
+@jsc
+// This example shows how jscode blocks are 1st class components and can be mixins
+Stack(
+"AA",
+Start("complex", "sAB"),
+"a",
+"b",
+End(),
+"BB",
+)
+@jsc
+
+x y z
+
+@jsc
+Optional("hello")
+@jsc	
+`;
+	let d_ex13b = new DiagramParser(a_ex13b)
+	let rslt_ex13b = d_ex13b.parse();
+	document.write(`<code>` + d_ex13b.prepareTroubleshootingHint() + `</code>`);
+	rslt_ex13b.addTo();
+
+</script>
 
 <h2 id=aux_a8>Pragma Debug toggle</h2>
 <script>
@@ -255,10 +285,7 @@ new DiagramParser(c_ex6).parse().addTo();
 	rslt_ex16.addTo();
 </script>
 
-
  <hr>
-
- 
 
  <h1 id=term_a>!!!!!  End complex w\o join EOL Notation</h1>
 <!-- 
@@ -302,19 +329,21 @@ new DiagramParser(c_ex6).parse().addTo();
  <h2 id=term_a1>Open / Closed connections </h2>
  <script>
 
-	let term_ex17 = `AA {: =[sAB= a b =eAB]= | =[sAB= x y =eAB]= } BB`;
+	let START_END_GROUP_TEST_SUITE = [
+			`<- a b =]= m =[= x y =]= c d ->`
+		, `<^ a b =]= m =[= x y =]= c d ^>`
+	];
+	for (let i = 0; i < START_END_GROUP_TEST_SUITE.length; i++) {
+		const test = START_END_GROUP_TEST_SUITE[i];
+		new DiagramParser(test).parse().addTo();
+	}
 
-	new DiagramParser(term_ex17).parse().addTo();
-
-	console.log(`Total CanConnect count: ${Component.CALL_COUNT}`);
-	console.log(`Savings CanConnect count: ${Component.SAVINGS_COUNT}`);
-
-	/**
-		TODO:
-			- fix diagram sequencing up to honour entry/exits
-
-		*/
  </script>
  
+
+<script>
+	console.log(`Total CanConnect count: ${Component.CALL_COUNT}`);
+	console.log(`Savings CanConnect count: ${Component.SAVINGS_COUNT}`);
+</script>
 
 </body>
