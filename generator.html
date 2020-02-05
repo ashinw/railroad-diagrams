@@ -1,6 +1,6 @@
 <!doctype html>
 <title>Railroad Diagram Generator</title>
-<link href="railroad-diagrams.css" rel=stylesheet>
+<link href="tracks-rrd.css" rel=stylesheet>
 
 <textarea class='input'>Diagram(
   Optional('+', 'skip'),
@@ -15,7 +15,7 @@
 <textarea class='output-text' readonly></textarea>
 
 <script type=module>
-import rr, * as rrClass from "./railroad.js";
+import rr, * as rrClass from "./dist/tracks-model.js";
 Object.assign(window, rr);
 console.log(rr);
 
