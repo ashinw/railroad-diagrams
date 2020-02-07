@@ -1,6 +1,6 @@
 <!doctype html>
 <title>Tracks Diagram Generator</title>
-<link href="tracks-rrd.css" rel=stylesheet>
+<link href="./lib/tracks-rrd.css" rel=stylesheet>
 
 <textarea class='input'>
 x y z
@@ -9,7 +9,7 @@ x y z
 <textarea class='output-text' readonly></textarea>
 
 <script type=module>
-import ParserManager from "./dist/tracks-parser.js";
+import ParserManager from "./lib/tracks-parser.js";
 const find = document.querySelector.bind(document);
 
 find('.input').addEventListener('input', e=>process(e.target.value), false);

@@ -1,24 +1,26 @@
 {
-  "name": "railroad-diagrams",
-  "version": "1.1.0",
-  "description": "A small JS+SVG library for drawing railroad syntax diagrams.",
-  "main": "railroad-diagrams.js",
+  "name": "tracks-rrd",
+  "version": "0.0.0",
+  "description": "A small JS+SVG library for drawing railroad syntax diagrams using tracks notation.",
+  "main": "./lib/tracks-parser.js",
   "type": "module",
+  "types": "./@types/tracks-parser.d.ts", 
   "repository": {
     "type": "git",
-    "url": "https://github.com/tabatkins/railroad-diagrams.git"
+    "url": "https://github.com/ashinw/tracks-rrd.git"
   },
   "keywords": [
+    "tracks",
     "railroad",
     "syntax",
     "diagrams",
     "grammar",
     "svg"
   ],
-  "author": "Tab Atkins Jr.",
+  "author": "AshinW",
   "license": "CC0-1.0",
   "bugs": {
-    "url": "https://github.com/tabatkins/railroad-diagrams/issues"
+    "url": "https://github.com/ashinw/tracks-rrd/issues"
   },
-  "homepage": "https://github.com/tabatkins/railroad-diagrams"
+  "homepage": "https://github.com/ashinw/tracks-rrd"
 }

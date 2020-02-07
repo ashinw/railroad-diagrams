@@ -40,24 +40,45 @@ const funcs = {
 };
 export default funcs;
 
-export const Options = {
-	DEBUG: false, // if true, writes some debug information into attributes
-	VS: 8, // minimum vertical separation between things. For a 3px stroke, must be at least 4
-	AR: 10, // radius of arcs
-	DIAGRAM_CLASS: 'tracks', // class to put on the root <svg>
-	STROKE_ODD_PIXEL_LENGTH: true, // is the stroke width an odd (1px, 3px, etc) pixel length?
-	INTERNAL_ALIGNMENT: 'center', // how to align items when they have extra space. left/right/center
-	CHAR_WIDTH: 8.5, // width of each monospace character. play until you find the right value for your font
-	COMMENT_CHAR_WIDTH: 7, // comments are in smaller text by default
-};
+export interface ConfigListener {
+	onElementAdded(child: HTMLElement, parent: HTMLElement): void;
+}
 
+class Configuration {
+	DEBUG= false; // if true; writes some debug information into attributes
+	VS= 8; // minimum vertical separation between things. For a 3px stroke; must be at least 4
+	AR= 10; // radius of arcs
+	DIAGRAM_CLASS= 'tracks'; // class to put on the root <svg>
+	STROKE_ODD_PIXEL_LENGTH= true; // is the stroke width an odd (1px; 3px; etc) pixel length?
+	INTERNAL_ALIGNMENT= 'center'; // how to align items when they have extra space. left/right/center
+	CHAR_WIDTH= 8.5; // width of each monospace character. play until you find the right value for your font
+	COMMENT_CHAR_WIDTH= 7; // comments are in smaller text by default
+
+	configListeners = new Array<ConfigListener>();
+	
+	notify(child: HTMLElement, parent: HTMLElement) {
+		this.configListeners.forEach(lsnr => {
+			lsnr.onElementAdded(child, parent);
+		});
+	}
+
+	addListener(lsnr: ConfigListener) {
+		this.configListeners.push(lsnr);
+	}
+
+	removeListener(lsnr: ConfigListener) {
+		let pos = this.configListeners.indexOf(lsnr);
+		if (pos > 0)
+			this.configListeners.splice(pos, 1);
+	}
+}
+
+export const Options = new Configuration(); // singleton
 
 export class FakeSVG {
 	children: any;
 	tagName: string;
-	attrs = {
-		d: "",
-	};
+	attrs = {};
 	up: number						= 0;
 	down: number					= 0;
 	height: number				= 0;
@@ -65,13 +86,18 @@ export class FakeSVG {
 	needsSpace: boolean		= true;
 
 	constructor(tagName: string, attrs?: object, text?: string|FakeSVG[]) {
+		this.tagName = tagName;
 		if (text) 
 			this.children = text;
 		else 
 			this.children = [];
-		this.tagName = tagName;
+		this.mergeAttributes(attrs);
+	}
+
+	protected mergeAttributes(attrs?: object): Object {
 		if (attrs)
 			this.attrs = {...this.attrs, ...attrs};	// merge
+		return this.attrs;
 	}
 
 	format(): FakeSVG;
@@ -98,7 +124,9 @@ export class FakeSVG {
 			el.textContent = this.children;
 		} else {
 			this.children.forEach(function(e) {
-				el.appendChild(e.toSVG());
+				let svg = e.toSVG();
+				el.appendChild(svg);
+				Options.notify(svg, <HTMLElement> el);
 			});
 		}
 		return el;
@@ -124,20 +152,22 @@ export class FakeSVG {
 	}
 }
 
+export class PathAttributes {
+		d: string;
+}
 
 export class Path extends FakeSVG {
-	constructor(x: number,y:number) {
-		super('path');
-		this.attrs.d = "M"+x+' '+y;
+	constructor(x: number, y:number) {
+		super('path', {d: "M"+x+' '+y});
 	}
 	
 	m(x: number,y:number) {
-		this.attrs.d += 'm'+x+' '+y;
+		(<PathAttributes>this.attrs).d += 'm'+x+' '+y;
 		return this;
 	}
 	
 	h(val:number) {
-		this.attrs.d += 'h'+val;
+		(<PathAttributes>this.attrs).d += 'h'+val;
 		return this;
 	}
 	
@@ -146,7 +176,7 @@ export class Path extends FakeSVG {
 	left(val:number) { return this.h(-Math.max(0, val)); }
 	
 	v(val:number) {
-		this.attrs.d += 'v'+val;
+		(<PathAttributes>this.attrs).d += 'v'+val;
 		return this;
 	}
 	
@@ -170,7 +200,7 @@ export class Path extends FakeSVG {
 		} else {
 			cw = 0;
 		}
-		this.attrs.d += "a"+Options.AR+" "+Options.AR+" 0 0 "+cw+' '+x+' '+y;
+		(<PathAttributes>this.attrs).d += "a"+Options.AR+" "+Options.AR+" 0 0 "+cw+' '+x+' '+y;
 		return this;
 	}
 
@@ -200,19 +230,19 @@ export class Path extends FakeSVG {
 			sd == 'neccw' ? [-s2, -s2inv] : null
 		;
 		path += offset.join(" ");
-		this.attrs.d += path;
+		(<PathAttributes>this.attrs).d += path;
 		return this;
 	}
 
 	l(x: number,y:number): Path {
-		this.attrs.d += 'l'+x+' '+y;
+		(<PathAttributes>this.attrs).d += 'l'+x+' '+y;
 		return this;
 	}
 
 	format(): Path {
 		// All paths in this library start/end horizontally.
 		// The extra .5 ensures a minor overlap, so there's no seams in bad rasterizers.
-		this.attrs.d += 'h.5';
+		(<PathAttributes>this.attrs).d += 'h.5';
 		return this;
 	}
 }
@@ -394,6 +424,65 @@ class SequenceableContainer extends Container implements Sequenceable {
 			return childCtx.previous;
 		return undefined;
 	}
+
+	refreshSequentially(): void {
+		for(const item of this.items) {
+			this.width += item.width + (item.needsSpace?20:0);
+			this.up = Math.max(this.up, item.up - this.height);
+			this.height += item.height;
+			this.down = Math.max(this.down - item.height, item.down);
+		}
+	}
+
+	formatSequentially(target: FakeSVG, x?: number,y?: number,width?: number): FakeSVG {
+		// Hook up the two sides if this is narrower than its stated width.
+		x = this.formatEntryExits(width, x, y, target);
+		for(var i = 0; i < this.items.length; i++) {
+			var item = this.items[i];
+			x = this.formatUplineConnection(item, i, x, y, target);
+			this.renderComponent(item, x, y, target);
+			({ x, y } = this.formatDownlineConnection(x, item, y, i, target));
+		}
+		return this;
+	}
+
+	protected renderComponent(item: Component, x: number, y: number, target: FakeSVG) {
+		item.format(x, y, item.width).addTo(target);
+	}
+
+	protected formatDownlineConnection(x: number, item: Component, y: number, i: number, target: FakeSVG) {
+		x += item.width;
+		y += item.height;
+		if (item.needsSpace && i < this.items.length - 1) {
+			if (item.canConnectDownline()) {
+				new Path(x, y).h(10).addTo(target);
+			}
+			x += 10;
+		}
+		return { x, y };
+	}
+
+	protected formatUplineConnection(item: Component, i: number, x: number, y: number, target: FakeSVG) {
+		if (item.needsSpace && i > 0) {
+			if (item.canConnectUpline()) {
+				new Path(x, y).h(10).addTo(target);
+			}
+			x += 10;
+		}
+		return x;
+	}
+
+	protected formatEntryExits(width: number, x: number, y: number, target: FakeSVG): number {
+		var gaps = determineGaps(width, this.width);
+		if (this.canConnectUpline()) {
+			new Path(x, y).h(gaps[0]).addTo(target);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x + gaps[0] + this.width, y + this.height).h(gaps[1]).addTo(target);
+		}
+		x += gaps[0];
+		return x;
+	}
 }
 
 
@@ -409,12 +498,13 @@ export interface Diagramable {
 }
 
 
-export class TracksDiagram extends SequenceableContainer implements Diagramable {
+export class TrackDiagram extends SequenceableContainer implements Diagramable {
 	formatted: boolean = false;
+	extraViewboxHeight= 0;
 	constructor(...items) {
 		super(items, 'svg', {class: Options.DIAGRAM_CLASS}, undefined);
 		this.needsSpace = false;
-		this.refresh();
+		this.refreshSequentially();
 	}
 
 	implementsDiagramable() {}
@@ -428,13 +518,18 @@ export class TracksDiagram extends SequenceableContainer implements Diagramable 
 	}
 
 	refresh(): void {
-		for(const item of this.items) {
-			this.width += item.width + (item.needsSpace?20:0);
-			this.up = Math.max(this.up, item.up - this.height);
-			this.height += item.height;
-			this.down = Math.max(this.down - item.height, item.down);
-		}
+		super.refreshSequentially();
 		this.formatted = false;
+	}
+
+	protected formatEntryExits(width: number, x: number, y: number, target: FakeSVG): number {
+		return x;	// nothing to do
+	}
+
+	protected renderComponent(item: Component, x: number, y: number, target: FakeSVG) {
+		super.renderComponent(item, x, y, target);
+		if (item instanceof Choice) // diagram viewbox height defect for Choice/Stack combo
+			this.extraViewboxHeight += item.extraHeight ? item.extraHeight: 0; 
 	}
 
 	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
@@ -446,36 +541,14 @@ export class TracksDiagram extends SequenceableContainer implements Diagramable 
 		var y = paddingt;
 		y += this.up;
 		var g = new FakeSVG('g', Options.STROKE_ODD_PIXEL_LENGTH ? {transform:'translate(.5 .5)'} : {});
-		let extraViewboxHeight = 0; 		
-		for(var i = 0; i < this.items.length; i++) {
-			var item = this.items[i];
-			if(item.needsSpace && i > 0) {
-				if (item.canConnectUpline()) {
-					new Path(x,y).h(10).addTo(g);
-				}
-				x += 10;
-			}
-			if (item instanceof Choice) // diagram viewbox height defect for Choice/Stack combo
-				extraViewboxHeight += item.extraHeight ? item.extraHeight: 0; 
-			item.format(x, y, item.width).addTo(g);
-			x += item.width;
-			y += item.height;
-			if(item.needsSpace && i < this.items.length-1) {
-				if (item.canConnectDownline()) {
-					new Path(x,y).h(10).addTo(g);
-				}
-				x += 10;
-			}
-		}
-		// this.attrs.width = this.width + paddingl + paddingr;
-		// this.attrs.height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
+		this.extraViewboxHeight = 0; 		
+		this.formatSequentially(g, x, y, this.width);
 		let _width = this.width + paddingl + paddingr;
-		let _height = this.up + this.height + this.down + paddingt + paddingb + extraViewboxHeight;
-		this.attrs = {...this.attrs, ...{
-				width: _width,
-				height: _height,
+		let _height = this.up + this.height + this.down + paddingt + paddingb + this.extraViewboxHeight;
+		this.mergeAttributes({
+				width: _width, height: _height,
 				viewBox: `0 0 ${_width} ${_height}`
-			}};
+			});
 		g.addTo(this);
 		this.formatted = true;
 		return this;
@@ -504,10 +577,10 @@ export class TracksDiagram extends SequenceableContainer implements Diagramable 
 		return super.toString();
 	}	
 } 
-funcs.TrackDiagram = (...args)=>new TracksDiagram(...args);
+funcs.TrackDiagram = (...args)=>new TrackDiagram(...args);
 
 
-export class Diagram extends TracksDiagram {
+export class Diagram extends TrackDiagram {
 	prepareItemsPriorToLinage(items: (string|Component)[]): void {
 		if(!(items[0] instanceof Start)) {
 			items.unshift(new Start());
@@ -555,15 +628,11 @@ class Control extends Component {
 export class Sequence extends SequenceableContainer implements Sequenceable {
 	constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
-		for(var i = 0; i < this.items.length; i++) {
-			var item = this.items[i];
-			this.width += item.width + (item.needsSpace?20:0);
-			this.up = Math.max(this.up, item.up - this.height);
-			this.height += item.height;
-			this.down = Math.max(this.down - item.height, item.down);
-		}
-		if(this.items[0].needsSpace) this.width -= 10;
-		if(this.items[this.items.length-1].needsSpace) this.width -= 10;
+		this.refreshSequentially();
+		if(this.items[0].needsSpace) 
+			this.width -= 10;
+		if(this.items[this.items.length-1].needsSpace) 
+			this.width -= 10;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "sequence";
@@ -571,35 +640,7 @@ export class Sequence extends SequenceableContainer implements Sequenceable {
 	}
 
 	format(x?: number,y?: number,width?: number): FakeSVG {
-		// Hook up the two sides if this is narrower than its stated width.
-		var gaps = determineGaps(width, this.width);
-		if (this.canConnectUpline()) {
-			new Path(x,y).h(gaps[0]).addTo(this);
-		}
-		if (this.canConnectDownline()) {
-			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
-		}
-		x += gaps[0];
-
-		for(var i = 0; i < this.items.length; i++) {
-			var item = this.items[i];
-			if(item.needsSpace && i > 0) {
-				if (item.canConnectUpline()) {
-					new Path(x,y).h(10).addTo(this);
-				} 
-				x += 10;	
-			}
-			item.format(x, y, item.width).addTo(this);
-			x += item.width;
-			y += item.height;
-			if(item.needsSpace && i < this.items.length-1) {
-				if (item.canConnectDownline()) {
-					new Path(x,y).h(10).addTo(this);
-				} 
-				x += 10;	
-			}
-		}
-		return this;
+		return this.formatSequentially(this, x, y, width);
 	}
 }
 funcs.Sequence = (...args)=>new Sequence(...args);
@@ -1627,9 +1668,9 @@ export class End extends TerminusNode {
 		x = this.formatSides(x, y, width);
 		let path = new Path(x, y-10);
 		if (this.type === "complex") {
-			path.attrs.d = 'M '+x+' '+y+' h 20 m 0 -10 v 20';
+			(<PathAttributes>path.attrs).d = 'M '+x+' '+y+' h 20 m 0 -10 v 20';
 		} else {
-			path.attrs.d = 'M '+x+' '+y+' h 20 m -10 -10 v 20 m 10 -20 v 20';
+			(<PathAttributes>path.attrs).d = 'M '+x+' '+y+' h 20 m -10 -10 v 20 m 10 -20 v 20';
 		}
 		path.addTo(this);
 		return super.format(x, y, width);
@@ -1823,11 +1864,3 @@ function escapeString(string) {
 		return '&#' + charString.charCodeAt(0) + ';';
 	});
 }
-
-// function* enumerate(iter) {
-// 	var count = 0;
-// 	for(const x of iter) {
-// 		yield [count, x];
-// 		count++;
-// 	}
-// }

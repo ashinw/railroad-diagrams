@@ -1,6 +1,6 @@
 <!doctype html>
 <title>Railroad Diagram Generator</title>
-<link href="tracks-rrd.css" rel=stylesheet>
+<link href="./lib/tracks-rrd.css" rel=stylesheet>
 
 <textarea class='input'>Diagram(
   Optional('+', 'skip'),
@@ -15,9 +15,7 @@
 <textarea class='output-text' readonly></textarea>
 
 <script type=module>
-import rr, * as rrClass from "./dist/tracks-model.js";
-Object.assign(window, rr);
-console.log(rr);
+import {evalScript} from "./lib/tracks-functional.js";
 
 const find = document.querySelector.bind(document);
 
@@ -48,7 +46,7 @@ function hashProcess() {
 function process(input) {
 	if(!input) input = find('.input').value;
 	try {
-		var result = eval(input).format();
+		var result = evalScript(input).format();
 		location.hash = "#" + encodeURIComponent(input);
 	} catch (e) {
 		find('.output-text').textContent = "Invalid input.\n" + e
