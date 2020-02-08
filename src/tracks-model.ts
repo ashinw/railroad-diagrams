@@ -57,19 +57,16 @@ class Configuration {
 	configListeners = new Array<ConfigListener>();
 	
 	notify(child: HTMLElement, parent: HTMLElement) {
-		this.configListeners.forEach(lsnr => {
-			lsnr.onElementAdded(child, parent);
-		});
+		if (this.configListeners.length > 0)
+			this.configListeners[this.configListeners.length-1].onElementAdded(child, parent);
 	}
 
-	addListener(lsnr: ConfigListener) {
+	pushListener(lsnr: ConfigListener) {
 		this.configListeners.push(lsnr);
 	}
 
-	removeListener(lsnr: ConfigListener) {
-		let pos = this.configListeners.indexOf(lsnr);
-		if (pos > 0)
-			this.configListeners.splice(pos, 1);
+	popListener() {
+		this.configListeners.pop();
 	}
 }
 
@@ -336,6 +333,10 @@ abstract class Container extends Component implements Containable {
 	implementsContainable() {}
 
 	prepareItemsPriorToLinage(items: (string|Component)[]): void {
+		for (let i = items.length-1; i >= 0 ; i--) {
+			if (!items[i]) // ie. null or undefined or empty string
+				items.splice(i, 1);
+		}
 	}
 
 	protected prepareComponentLinage(items: (string|Component)[]): void {
@@ -629,10 +630,12 @@ export class Sequence extends SequenceableContainer implements Sequenceable {
 	constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		this.refreshSequentially();
-		if(this.items[0].needsSpace) 
-			this.width -= 10;
-		if(this.items[this.items.length-1].needsSpace) 
-			this.width -= 10;
+		if (this.items.length > 0) {
+			if (this.items[0].needsSpace)
+				this.width -= 10;
+			if (this.items[this.items.length - 1].needsSpace)
+				this.width -= 10;
+		}
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "sequence";

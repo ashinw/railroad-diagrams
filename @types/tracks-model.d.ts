@@ -36,8 +36,8 @@ declare class Configuration {
     COMMENT_CHAR_WIDTH: number;
     configListeners: ConfigListener[];
     notify(child: HTMLElement, parent: HTMLElement): void;
-    addListener(lsnr: ConfigListener): void;
-    removeListener(lsnr: ConfigListener): void;
+    pushListener(lsnr: ConfigListener): void;
+    popListener(): void;
 }
 export declare const Options: Configuration;
 export declare class FakeSVG {

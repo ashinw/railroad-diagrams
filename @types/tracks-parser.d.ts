@@ -38,22 +38,22 @@ pragmas:
     @dbg				toggle
     @esc<char>	set character
  */
-import { ConfigListener, Diagramable } from './tracks-model.js';
-export declare class ParserManager implements ConfigListener {
-    elementHandler?: ConfigListener;
+import { ConfigListener, Diagramable, Component } from './tracks-model.js';
+export declare class ParserManager {
+    elementResolver?: ConfigListener;
     context: ParserReadContext;
     parsers: ComponentParser[];
     tokenStack: any[];
     targetTracksDiagram: boolean;
-    constructor(src: string, debug?: boolean, elementHandler?: ConfigListener);
+    constructor(src: string, debug?: boolean, elementResolver?: ConfigListener);
     isDebug(): boolean;
-    onElementAdded(child: HTMLElement, parent: HTMLElement): void;
     parse(): Diagramable;
-    parseNextComponent(callerState: ParserState): any[];
+    parseComponents(): Component[];
+    parseNextComponent(callerState: ParserState): Component;
     getParser(callerState: ParserState): ParserState;
     prepareTroubleshootingHint(): string;
     addToTokenisedStack(state: ParserState): void;
-    registerParser(parser: ComponentParser): void;
+    registerParser(parser: ComponentParser, index?: number): void;
     protected loadParsers(): void;
     protected reorderParsers(): void;
 }
@@ -74,7 +74,7 @@ declare class ParserReadContext {
     escapedRegExIndexOf(src: string, criteria: RegExp, startFrom: number, storeMatch: string[]): number;
     unescape(src: string): string;
 }
-declare class ParserState {
+export declare class ParserState {
     parser: ComponentParser;
     startsFrom: number;
     openSyntax: string;
@@ -84,13 +84,20 @@ declare class ParserState {
     attr: any;
     constructor(parser: ComponentParser, startsFrom: number, openSyntax: string, closeSyntax: string, operationName: string);
 }
-declare abstract class ComponentParser {
+export declare abstract class ComponentParser {
     controller: ParserManager;
     ctx: ParserReadContext;
     constructor(controller: ParserManager);
     abstract canParse(): ParserState;
-    abstract parse(state: ParserState): any;
+    abstract parse(state: ParserState): Component;
     protected canParseWith(openingList: string[], closingList: string[], regOrStr: RegExp, opName: string): ParserState;
     protected canParseWith(openingList: string[], closingList: string[], regOrStr: string, opName: string): ParserState;
     protected raiseMissingClosureError(open: string, close: string, op: string): void;
+}
+export declare abstract class OperandDelimComponentParser extends ComponentParser {
+    delim: string;
+    constructor(controller: ParserManager, delim?: string);
+    readUntilClosingToken(state: ParserState, useClosingRegEx?: RegExp): string[];
+    protected finaliseState(operation: string, state: ParserState): string[];
+    protected readOperands(operation: string): string[];
 }

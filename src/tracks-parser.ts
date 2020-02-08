@@ -52,14 +52,14 @@ import {
 
 import {evalScript} from './tracks-functional.js';
 
-export class ParserManager implements ConfigListener {
+export class ParserManager {
 	context = new ParserReadContext();
 	parsers = new Array<ComponentParser>();
 	tokenStack = [];
 	targetTracksDiagram = false;
 
 	constructor(src: string, debug = false, 
-							public elementHandler?: ConfigListener) {
+							public elementResolver?: ConfigListener) {
 		this.context.source = src.trim();
 		this.loadParsers();
 		this.reorderParsers();
@@ -70,14 +70,20 @@ export class ParserManager implements ConfigListener {
 		return Options.DEBUG;
 	}
 
-	onElementAdded(child: HTMLElement, parent: HTMLElement): void {
-		if (this.elementHandler)
-			this.elementHandler.onElementAdded(child, parent);
+	parse(): Diagramable {
+		let items = this.parseComponents();
+		let diag: Diagramable;
+		if (items.length === 1 && (<Diagramable><unknown>items[0]).implementsDiagramable)
+			diag = (<Diagramable><unknown>items[0]);
+		else
+			diag = this.targetTracksDiagram ? new TrackDiagram(...items): new Diagram(...items);
+		return diag;
 	}
 
-	parse(): Diagramable {
-		let items = [];
-		Options.addListener(this);
+	parseComponents(): Component[] {
+		let items = new Array<Component>();
+		if (this.elementResolver)
+			Options.pushListener(this.elementResolver);
 		try {
 			while (this.context.hasMore()) {
 				let item = this.parseNextComponent(undefined);
@@ -85,18 +91,15 @@ export class ParserManager implements ConfigListener {
 					items.push(item);
 				this.context.skipWhitespace();
 			}
-		} finally {
-			Options.removeListener(this);
 		}
-		let diag: Diagramable;
-		if (items.length === 1 && items[0].implementsDiagramable)
-			diag = items[0];
-		else
-			diag = this.targetTracksDiagram ? new TrackDiagram(...items): new Diagram(...items);
-		return diag;
+		finally {
+			if (this.elementResolver)
+				Options.popListener();
+		}
+		return items;
 	}
 
-	parseNextComponent(callerState: ParserState): any[] {
+	parseNextComponent(callerState: ParserState): Component {
 		let state = this.getParser(callerState);
 		let item = state.parser.parse(state);
 		return item;
@@ -110,8 +113,7 @@ export class ParserManager implements ConfigListener {
 				return state;
 			}
 		}
-		let tsStr = this.prepareTroubleshootingHint();
-		throw new Error(`Illegal argument: [${callerState ? callerState.operationName : 'Diagram'}] - Within  ${callerState ? callerState.openSyntax + " ... " + callerState.closeSyntax : 'Root'}.  No parsers can handle the following signature tokens: "${this.context.source.substr(this.context.pos, 4)}. Refer to this tokenised stack for troubleshooting: ${tsStr}"`);
+		throw new Error(`Illegal argument: [${callerState ? callerState.operationName : 'Diagram'}] - Within ${callerState ? callerState.openSyntax + " ... " + callerState.closeSyntax : 'Root'}.  No parsers can process these next signature tokens: "${this.context.source.substr(this.context.pos, 4)}". Note, the previous parser may have consumed more tokens than expected. Refer to this tokenised stack for troubleshooting in debug mode.`);
 	}
 
 	prepareTroubleshootingHint(): string {
@@ -131,8 +133,11 @@ export class ParserManager implements ConfigListener {
 		this.tokenStack.push(tokenisedItem);
 	}
 
-	registerParser(parser: ComponentParser) {
-		this.parsers.push(parser);
+	registerParser(parser: ComponentParser, index?: number) {
+		if (index) {
+			this.parsers.splice(index, 0, parser);
+		} else
+			this.parsers.push(parser);
 	}
 
 	protected loadParsers() {
@@ -268,7 +273,7 @@ class ParserReadContext {
 }
 
 
-class ParserState {
+export class ParserState {
 	items = [];
 	attr: any = {};
 	constructor(public parser: ComponentParser,
@@ -283,13 +288,13 @@ class ParserState {
 
 // Note: All parsers must be implemented to be stateless. 
 // Use ParserState for storage!
-abstract class ComponentParser {
+export abstract class ComponentParser {
 	ctx: ParserReadContext = this.controller.context;
 	constructor(public controller: ParserManager) {
 	}
 
 	abstract canParse(): ParserState;
-	abstract parse(state: ParserState): any;
+	abstract parse(state: ParserState): Component;
 
 	protected canParseWith(openingList: string[], closingList: string[], regOrStr: RegExp, opName: string): ParserState;
 	protected canParseWith(openingList: string[], closingList: string[], regOrStr: string, opName: string): ParserState;
@@ -304,13 +309,15 @@ abstract class ComponentParser {
 	}
 
 	protected raiseMissingClosureError(open: string, close: string, op: string): void {
-		throw new Error(`Missing closure: ${open} ... ${close} - ${op} terminated with closing notation`);
+		throw new Error(`Missing closure for: Opening syntax ${open} - ${op} terminated unexpectedly without ${close} closing notation`);
 	}
 }
 
 
-abstract class TitleLinkComponentParser extends ComponentParser {
-	static DELIM = "|";
+export abstract class OperandDelimComponentParser extends ComponentParser {
+	constructor(controller: ParserManager, public delim: string = "|") {
+		super(controller);
+	}
 
 	readUntilClosingToken(state: ParserState, useClosingRegEx?: RegExp): string[] {
 		this.controller.addToTokenisedStack(state);
@@ -324,29 +331,35 @@ abstract class TitleLinkComponentParser extends ComponentParser {
 			pos = this.ctx.escapedStringIndexOf(this.ctx.source, state.closeSyntax, this.ctx.pos);
 		if (pos === -1)
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
-		let text = this.ctx.skipTo(pos);
-		text = this.ctx.unescape(text);
-		let ret = this.finaliseState(text, state);
+		let operation = this.ctx.skipTo(pos);
+		operation = this.ctx.unescape(operation);
+		let ret = this.finaliseState(operation, state);
 		this.ctx.readIn(state.closeSyntax.length);
 		return ret;
 	}
 
-	protected finaliseState(comment: string, state: ParserState): string[] {
-		let ret = this.readTitleLink(comment);
-		state.attr.text = ret[0];
-		state.attr.link = ret[1];
+	protected finaliseState(operation: string, state: ParserState): string[] {
+		let ret = this.readOperands(operation);
+		state.attr.operands = ret;
 		state.items.push(ret);
 		return ret;
 	}
 
-	protected readTitleLink(comment: string): string[] {
-		let pos = this.ctx.escapedStringIndexOf(comment, TitleLinkComponentParser.DELIM, 0);
-		if (pos === -1)
-			return [comment, undefined];
-		let link = comment.substr(pos + 1);
-		let escapedComment = comment.substr(0, pos);
-		comment = this.ctx.unescape(escapedComment);
-		return [comment, link];
+	protected readOperands(operation: string): string[] {
+		let ret = [];
+		let operand = undefined;
+		while (true) {
+			let pos = this.ctx.escapedStringIndexOf(operation, this.delim, 0);
+			if (pos === -1) 
+				break;
+			operand = operation.substr(0, pos)
+			operand = this.ctx.unescape(operand);
+			ret.push(operand);
+			operation = operation.substr(pos + 1);
+		}
+		operand = this.ctx.unescape(operation);
+		ret.push(operand);
+		return ret;
 	}
 }
 
@@ -465,14 +478,14 @@ class ChoiceParser extends ComponentParser {
 	private handlePreferredOption(state: ParserState) {
 		this.ctx.readIn(ChoiceParser.PREFER_DELIM.length);
 		if (state.attr.preferIndex > -1)
-			throw new Error(`Illegal argument: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} supports only 1 default preceding the option using ${ChoiceParser.PREFER_DELIM}`);
+			throw new Error(`Illegal argument: Within ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} supports only 1 default preceding the option using ${ChoiceParser.PREFER_DELIM}`);
 		state.attr.preferIndex = state.attr.optionsCount - 1;
 	}
 
 	private handleNextOption(state: ParserState) {
 		this.ctx.readIn(ChoiceParser.OPTION_DELIM.length);
 		if (state.attr.optionsCount === 1 && state.items[state.attr.optionsCount - 1].length === 0)
-			throw new Error(`Illegal argument:  ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} requires an option before/betweem ${ChoiceParser.OPTION_DELIM}`);
+			throw new Error(`Illegal argument: Within ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} requires an option before/betweem ${ChoiceParser.OPTION_DELIM}`);
 		state.attr.optionsCount++;
 		state.items[state.attr.optionsCount - 1] = [];
 	}
@@ -511,9 +524,9 @@ class ChoiceParser extends ComponentParser {
 
 
 /*
-/"text|link"/	comment (see titleLinkDelim for delimiter)
+/"text|link"/	comment (see OperandDelim for delimiter)
 */
-class CommentParser extends TitleLinkComponentParser {
+class CommentParser extends OperandDelimComponentParser {
 	static OPEN_LIST = ["/\""];
 	static CLOSE_LIST = ["\"/"];
 
@@ -523,8 +536,10 @@ class CommentParser extends TitleLinkComponentParser {
 	}
 
 	parse(state: ParserState): Component {
-		let titleLinkArr = super.readUntilClosingToken(state);
-		let trkType = new Comment(titleLinkArr[0], undefined, titleLinkArr[1]);
+		let titleLinkArr = this.readUntilClosingToken(state);
+		let trkType = new Comment(titleLinkArr[0], 
+															undefined, 
+															titleLinkArr.length <= 1 ? undefined: titleLinkArr[1]);
 		return trkType;
 	}
 }
@@ -533,7 +548,7 @@ class CommentParser extends TitleLinkComponentParser {
 /*
 <"title|link">	  nonterminal with optional link
 */
-class NonTerminalParser extends TitleLinkComponentParser {
+class NonTerminalParser extends OperandDelimComponentParser {
 	static OPEN_LIST = ["<\""];
 	static CLOSE_LIST = ["\">"];
 
@@ -543,8 +558,10 @@ class NonTerminalParser extends TitleLinkComponentParser {
 	}
 
 	parse(state: ParserState): Component {
-		let titleLinkArr = super.readUntilClosingToken(state);
-		let trkType = new NonTerminal(titleLinkArr[0], undefined, titleLinkArr[1]);
+		let titleLinkArr = this.readUntilClosingToken(state);
+		let trkType = new NonTerminal(titleLinkArr[0], 
+																	undefined, 
+																	titleLinkArr.length <= 1 ? undefined: titleLinkArr[1]);
 		return trkType;
 	}
 }
@@ -553,7 +570,7 @@ class NonTerminalParser extends TitleLinkComponentParser {
 /*
 "title|link"		  terminal with optional link
 */
-class TerminalParser extends TitleLinkComponentParser {
+class TerminalParser extends OperandDelimComponentParser {
 	static OPEN_LIST = ["\""];
 	static CLOSE_LIST = ["\""];
 
@@ -563,14 +580,16 @@ class TerminalParser extends TitleLinkComponentParser {
 	}
 
 	parse(state: ParserState): Component {
-		let titleLinkArr = super.readUntilClosingToken(state);
-		let trkType = new Terminal(titleLinkArr[0], undefined, titleLinkArr[1]);
+		let titleLinkArr = this.readUntilClosingToken(state);
+		let trkType = new Terminal(titleLinkArr[0], 
+																undefined, 
+																titleLinkArr.length <= 1 ? undefined: titleLinkArr[1]);
 		return trkType;
 	}
 }
 
 
-class StartParser extends TitleLinkComponentParser {
+class StartParser extends OperandDelimComponentParser {
 	static CLOSE = "=";
 	static REG_EX = /^\+?=\[\|?/;
 
@@ -583,16 +602,18 @@ class StartParser extends TitleLinkComponentParser {
 	}
 
 	parse(state: ParserState): Component {
-		let titleLinkArr = super.readUntilClosingToken(state);
+		let titleLinkArr = this.readUntilClosingToken(state);
 		state.attr.connectToMainline = (state.openSyntax.charAt(0) === "+");
 		state.attr.type = state.openSyntax.endsWith("=[|") ? "simple" : "complex";
-		let trkType = new Start(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
+		let trkType = new Start(state.attr.type, titleLinkArr[0], 
+														titleLinkArr.length <= 1 ? undefined: titleLinkArr[1],
+														state.attr.connectToMainline);
 		return trkType;
 	}
 }
 
 
-class EndParser extends TitleLinkComponentParser {
+class EndParser extends OperandDelimComponentParser {
 	static OPEN = "=";
 	static REG_EX = /\|?\]=\+?/;
 
@@ -605,10 +626,12 @@ class EndParser extends TitleLinkComponentParser {
 	}
 
 	parse(state: ParserState): Component {
-		let titleLinkArr = super.readUntilClosingToken(state, EndParser.REG_EX);
+		let titleLinkArr = this.readUntilClosingToken(state, EndParser.REG_EX);
 		state.attr.connectToMainline = (state.closeSyntax.charAt(state.closeSyntax.length - 1) === "+");
 		state.attr.type = state.closeSyntax.startsWith("|]=") ? "simple" : "complex";
-		let trkType = new End(state.attr.type, titleLinkArr[0], titleLinkArr[1], state.attr.connectToMainline);
+		let trkType = new End(state.attr.type, titleLinkArr[0], 
+													titleLinkArr.length <= 1 ? undefined: titleLinkArr[1],
+													state.attr.connectToMainline);
 		return trkType;
 	}
 }
@@ -651,7 +674,7 @@ class BlockParser extends ComponentParser {
 
 
 /*
-regEx = /([a-zA-Z0-9_.-]+)/g;
+regEx = /([a-zA-Z0-9_.-]+)/;
 */
 class LiteralNonTerminalParser extends ComponentParser {
 	canParse(): ParserState {
@@ -659,7 +682,7 @@ class LiteralNonTerminalParser extends ComponentParser {
 		let char = this.ctx.source.charAt(this.ctx.pos);
 		let match = char.match(/([a-zA-Z0-9_.-]+)/);
 		if (match && match.index > -1)
-			state = new ParserState(this, this.ctx.pos + 1, char, "/([a-zA-Z0-9_.-]+)/g", "literal terminal parser");
+			state = new ParserState(this, this.ctx.pos + 1, char, "/([a-zA-Z0-9_.-]+)/", "literal terminal parser");
 		return state;
 	}
 
@@ -674,7 +697,7 @@ class LiteralNonTerminalParser extends ComponentParser {
 			state.items.push(state.attr.name);
 			this.ctx.readIn(match[1].length);
 		} else
-			throw new Error(`Illegal argument: [a-zA-Z0-9_.-]...[a-zA-Z0-9_.-] - ${state.operationName} supports only standard characterset for naming`);
+			throw new Error(`Illegal argument: Within [a-zA-Z0-9_.-]...[a-zA-Z0-9_.-] - ${state.operationName} supports only standard characterset for naming`);
 		let trkType = new NonTerminal(state.attr.name);
 		return trkType;
 	}
@@ -720,7 +743,7 @@ class OptionalParser extends ComponentParser {
 			this.ctx.skipWhitespace();
 		}
 		if (state.items.length === 0)
-			throw new Error(`Invalid state: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} extended an operand`);
+			throw new Error(`Invalid state: Within ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} requires an operand(s) to process`);
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.operationName, state.closeSyntax, state.operationName);
 		let item = state.items.length === 1 ? state.items[0] : new Sequence(...state.items);
@@ -776,8 +799,8 @@ class RepeatParser extends ComponentParser {
 			}
 			this.ctx.skipWhitespace();
 		}
-		if (state.items.length === 0)
-			throw new Error(`Invalid state: ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} extended an operand`);
+		if (state.items[0].length === 0)
+			throw new Error(`Invalid state: Within ${state.openSyntax} ... ${state.closeSyntax} - ${state.operationName} requires an operand(s) to process`);
 		if (!state.attr.closed)
 			this.raiseMissingClosureError(state.openSyntax, state.closeSyntax, state.operationName);
 		return this.constructModel(state);
