@@ -12,6 +12,7 @@ declare const funcs: {
     Optional: any;
     ZeroOrMore: any;
     OneOrMore: any;
+    Group: any;
     Start: any;
     End: any;
     Terminal: any;
@@ -40,6 +41,7 @@ declare class Configuration {
     popListener(): void;
 }
 export declare const Options: Configuration;
+export declare const defaultCSS = "\n\tsvg {\n\t\tbackground-color: hsl(30,20%,95%);\n\t}\n\tpath {\n\t\tstroke-width: 3;\n\t\tstroke: black;\n\t\tfill: rgba(0,0,0,0);\n\t}\n\ttext {\n\t\tfont: bold 14px monospace;\n\t\ttext-anchor: middle;\n\t\twhite-space: pre;\n\t}\n\ttext.diagram-text {\n\t\tfont-size: 12px;\n\t}\n\ttext.diagram-arrow {\n\t\tfont-size: 16px;\n\t}\n\ttext.label {\n\t\ttext-anchor: start;\n\t}\n\ttext.comment {\n\t\tfont: italic 12px monospace;\n\t}\n\tg.non-terminal text {\n\t\t/*font-style: italic;*/\n\t}\n\trect {\n\t\tstroke-width: 3;\n\t\tstroke: black;\n\t\tfill: hsl(120,100%,90%);\n\t}\n\trect.group-box {\n\t\tstroke: gray;\n\t\tstroke-dasharray: 10 5;\n\t\tfill: none;\n\t}\n\tpath.diagram-text {\n\t\tstroke-width: 3;\n\t\tstroke: black;\n\t\tfill: white;\n\t\tcursor: help;\n\t}\n\tg.diagram-text:hover path.diagram-text {\n\t\tfill: #eee;\n\t}";
 export declare class FakeSVG {
     children: any;
     tagName: string;
@@ -57,6 +59,7 @@ export declare class FakeSVG {
     addTo(parent: FakeSVG | Node): any;
     toSVG(): any;
     toString(): string;
+    walk(cb: any): void;
 }
 export declare class PathAttributes {
     d: string;
@@ -104,6 +107,7 @@ declare abstract class Container extends Component implements Containable {
     abstract getUplineComponent(childCtx: Component): Component;
     hasDownlineSupport(childCtx: Component): boolean;
     hasUplineSupport(childCtx: Component): boolean;
+    walk(cb: any): void;
 }
 interface Sequenceable {
     implementsSequenceable(): any;
@@ -150,6 +154,7 @@ export declare class TrackDiagram extends SequenceableContainer implements Diagr
     addTo(parent?: FakeSVG | Node): any;
     toSVG(): any;
     toString(): string;
+    toStandalone(style: any): string;
 }
 export declare class Diagram extends TrackDiagram {
     prepareItemsPriorToLinage(items: (string | Component)[]): void;
@@ -238,6 +243,17 @@ export declare class OneOrMore extends SequenceableContainer implements Repeatab
     getDownlineComponent(childCtx: Component): Component;
     getUplineComponent(childCtx: Component): Component;
     format(x?: number, y?: number, width?: number): FakeSVG;
+    walk(cb: any): void;
+}
+export declare class Group extends Container {
+    item: Component;
+    label: Component;
+    boxUp: number;
+    constructor(...items: (string | Component)[]);
+    format(x?: number, y?: number, width?: number): FakeSVG;
+    walk(cb: any): void;
+    getDownlineComponent(childCtx: Component): Component;
+    getUplineComponent(childCtx: Component): Component;
 }
 export declare class ZeroOrMore extends Optional implements Conditionable, Repeatable {
     constructor(item: Component | string, rep: Component | string, skip: string | undefined);

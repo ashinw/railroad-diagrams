@@ -22,7 +22,8 @@ x y z			    implicit sequence
 (-x|y|z-)		  horizontal alternatives (ie. HorizontalChoice)
 ($x|:y|z$)	  all alternatives, normally y (ie. MultipleChoice)
 (&x|:y|z&)	  any alternatives, normally y (ie. MultipleChoice)
--						  by pass (ie. Skip)
+(x|y)         group of container x with a group label of y
+~						  by pass (ie. Skip)
 
 "title|link"		  terminal with optional link
 <"title|link">	  nonterminal with optional link

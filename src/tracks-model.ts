@@ -29,6 +29,7 @@ const funcs = {
 	Optional: undefined,
 	ZeroOrMore: undefined,
 	OneOrMore: undefined,
+	Group: undefined,
 	Start: undefined,
 	End: undefined,
 	Terminal: undefined,
@@ -71,6 +72,55 @@ class Configuration {
 }
 
 export const Options = new Configuration(); // singleton
+
+export const defaultCSS = `
+	svg {
+		background-color: hsl(30,20%,95%);
+	}
+	path {
+		stroke-width: 3;
+		stroke: black;
+		fill: rgba(0,0,0,0);
+	}
+	text {
+		font: bold 14px monospace;
+		text-anchor: middle;
+		white-space: pre;
+	}
+	text.diagram-text {
+		font-size: 12px;
+	}
+	text.diagram-arrow {
+		font-size: 16px;
+	}
+	text.label {
+		text-anchor: start;
+	}
+	text.comment {
+		font: italic 12px monospace;
+	}
+	g.non-terminal text {
+		/*font-style: italic;*/
+	}
+	rect {
+		stroke-width: 3;
+		stroke: black;
+		fill: hsl(120,100%,90%);
+	}
+	rect.group-box {
+		stroke: gray;
+		stroke-dasharray: 10 5;
+		fill: none;
+	}
+	path.diagram-text {
+		stroke-width: 3;
+		stroke: black;
+		fill: white;
+		cursor: help;
+	}
+	g.diagram-text:hover path.diagram-text {
+		fill: #eee;
+	}`;
 
 export class FakeSVG {
 	children: any;
@@ -146,6 +196,10 @@ export class FakeSVG {
 		}
 		str += '</' + this.tagName + '>\n';
 		return str;
+	}
+
+	walk(cb): void {
+		cb(this)
 	}
 }
 
@@ -380,6 +434,11 @@ abstract class Container extends Component implements Containable {
 		// go up a level and try parent
 		return childCtx.parentContainer.hasUplineSupport(childCtx.parentContainer); 
 	}
+
+	walk(cb): void {
+		cb(this);
+		this.items.forEach(x=>x.walk(cb));
+	}
 }
 
 
@@ -576,6 +635,20 @@ export class TrackDiagram extends SequenceableContainer implements Diagramable {
 			this.format();
 		}
 		return super.toString();
+	}	
+
+	toStandalone(style): string {
+		if(!this.formatted) {
+			this.format();
+		}
+		const s = new FakeSVG('style', {}, style || defaultCSS);
+		this.children.push(s);
+		this.attrs['xmlns'] = "http://www.w3.org/2000/svg";
+		this.attrs['xmlns:xlink'] = "http://www.w3.org/1999/xlink";
+		const result = super.toString.call(this);
+		this.children.pop();
+		delete this.attrs['xmlns'];
+		return result;
 	}	
 } 
 funcs.TrackDiagram = (...args)=>new TrackDiagram(...args);
@@ -1551,8 +1624,93 @@ export class OneOrMore extends SequenceableContainer implements Repeatable {
 		}
 		return this;
 	}
+
+	walk(cb): void {
+		cb(this);
+		this.item.walk(cb);
+		this.rep.walk(cb);
+	}	
 }
 funcs.OneOrMore = (item: Component|string, rep: Component|string, arr: boolean)=>new OneOrMore(item, rep, arr);
+
+
+export class Group extends Container {
+	item: Component;
+	label: Component;
+	boxUp: number;
+
+	constructor(...items: (string|Component)[]) {
+		super(items, 'g', {}, undefined);
+		if(items.length === 0 || items.length > 2) {
+			throw new RangeError("Group() must have at least one child container and may have an optional label");
+		}
+		this.item = this.items[0];
+		this.label = this.items[1];
+		this.width = Math.max(
+			this.item.width + (this.item.needsSpace?20:0),
+			this.label ? this.label.width : 0,
+			Options.AR*2);
+		this.height = this.item.height;
+		this.boxUp = this.up = Math.max(this.item.up + Options.VS, Options.AR);
+		if(this.label) {
+			this.up += this.label.up + this.label.height + this.label.down;
+		}
+		this.down = Math.max(this.item.down + Options.VS, Options.AR);
+		this.needsSpace = true;
+		if(Options.DEBUG) {
+			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
+			this.attrs['data-type'] = "group";
+		}
+	}
+
+	format(x?: number,y?: number,width?: number): FakeSVG {
+		var gaps = determineGaps(width, this.width);
+		if (this.canConnectUpline()) {
+			new Path(x,y).h(gaps[0]).addTo(this);
+		}
+		if (this.canConnectDownline()) {
+			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
+		}
+		x += gaps[0];
+
+		new FakeSVG('rect', {
+			x,
+			y:y-this.boxUp,
+			width:this.width,
+			height:this.boxUp + this.height + this.down,
+			rx: Options.AR,
+			ry: Options.AR,
+			'class':'group-box',
+		}).addTo(this);
+
+		this.item.format(x,y,this.width).addTo(this);
+		if(this.label) {
+			this.label.format(
+				x,
+				y-(this.boxUp+this.label.down+this.label.height),
+				this.label.width).addTo(this);
+		}
+
+		return this;
+	}
+
+	walk(cb) {
+		cb(this);
+		this.item.walk(cb);
+		this.label.walk(cb);
+	}
+
+	getDownlineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		return childCtx.parentContainer.next; 
+	}
+
+	getUplineComponent(childCtx: Component): Component {
+		this.assertValidLinageVerification(childCtx);
+		return childCtx.parentContainer.previous; 
+	}
+}
+funcs.Group = (...args: any[])=>new Group(...args);
 
 
 export class ZeroOrMore extends Optional implements Conditionable, Repeatable {

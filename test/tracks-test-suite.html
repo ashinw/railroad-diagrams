@@ -3,6 +3,10 @@
 body {
 	background-color: hsl(30,20%, 95%);
 }
+h1 {
+	font-family: sans-serif;
+	font-size: 1em;
+}
 script {
 	display: block;
 	white-space: pre;
@@ -38,7 +42,7 @@ let fixture = [
 			["Horizontal", `(- x|y|z -)`], 
 			["All Multi", `($ x|y|:z $)`], 
 			["Any Multi", `(& x|y|z &)`], 
-			["chg", `chg`], 
+			["Group", `({x|y}| /"this is test"/)`], 
 		]
 	},
 	{
@@ -80,7 +84,7 @@ let fixture = [
 			["Quoted Non-Terminal", `x <"$nonterminal w/ no character restrictions!"> y`], 
 			["Quoted Non-Terminal w/ URL", `c <"nonterminal name w/ URL|http://google.com"> y`], 
 			["Comment", `/"it would be better if mutli line was supported."/`], 
-			["Comment w/ escaping & URL", `/"url seperator is \\| terminator is \\"/ w/ URL|http://google.com"/`], 
+			["Comment w/ escaping & URL", `/"url seperator is \\\\| terminator is "\\/ w/ URL|http://google.com"/`], 
 		]
 	},
 	{

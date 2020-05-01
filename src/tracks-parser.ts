@@ -22,7 +22,8 @@ x y z			    implicit sequence
 (-x|y|z-)		  horizontal alternatives (ie. HorizontalChoice)
 ($x|:y|z$)	  all alternatives, normally y (ie. MultipleChoice)
 (&x|:y|z&)	  any alternatives, normally y (ie. MultipleChoice)
--						  by pass (ie. Skip)
+(x|y)         group of container x with a group label of y
+~						  by pass (ie. Skip)
 
 "title|link"		  terminal with optional link
 <"title|link">	  nonterminal with optional link
@@ -47,7 +48,7 @@ import {
 	Sequence, Stack, AlternatingSequence, OptionalSequence,
 	Choice, HorizontalChoice, MultipleChoice, 
 	Optional, OneOrMore, 
-	Terminal, NonTerminal, Start, End, Skip, Comment, Block
+	Terminal, NonTerminal, Start, End, Skip, Comment, Block, Group
 } from './tracks-model.js';
 
 import {evalScript} from './tracks-functional.js';
@@ -260,18 +261,26 @@ class ParserReadContext {
 		let doubleEsc = this.escapeChar + this.escapeChar;
 		let isDoubleEscaped = src.indexOf(doubleEsc) !== -1;
 		let hackRepl = undefined;
-		let ret: string = undefined;
+		let ret: string = src;
 		if (isDoubleEscaped) {
-			hackRepl = "'^_:\\$\\:_^'".replace(this.escapeChar, "");
-			ret = src.replace(doubleEsc , hackRepl);
+			hackRepl = replaceAll("'^_:\\$\\:_^'", this.escapeChar, "");
+			ret = replaceAll(src, doubleEsc, hackRepl);
 		} 
-		ret = src.replace(this.escapeChar, "");
+		ret = replaceAll(ret, this.escapeChar, "");
 		if (isDoubleEscaped)
-			ret = ret.replace(hackRepl, this.escapeChar);
+			ret = replaceAll(ret, hackRepl, this.escapeChar);
 		return ret;
 	}
 }
 
+function replaceAll(str: string, srch: string, repl: string): string {
+	let regex = new RegExp(escapeRegExp(srch), 'g');
+	return str.replace(regex, repl);
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
 
 export class ParserState {
 	items = [];
@@ -423,13 +432,14 @@ class SequenceParser extends ComponentParser {
 (-x|y|z-)		  horizontal alternatives (ie. HorizontalChoice)
 ($x|:y|z$)	  all alternatives, normally y (ie. MultipleChoice)
 (&x|:y|z&)	  any alternatives, normally y (ie. MultipleChoice)
+(x|y)         group of container x with a group label of y
 */
 class ChoiceParser extends ComponentParser {
-	static OPEN_LIST = ["(?", "(-", "($", "(&"];
-	static CLOSE_LIST = ["?)", "-)", "$)", "&)"];
+	static OPEN_LIST = ["(?", "(-", "($", "(&", "("];
+	static CLOSE_LIST = ["?)", "-)", "$)", "&)", ")"];
 	static OPTION_DELIM = "|";
 	static PREFER_DELIM = ":";
-	static REG_EX = /^(\(\?|\(-|\(\$|\(&)/;
+	static REG_EX = /^(\(\?|\(-|\(\$|\(&|\()/;
 
 	canParse(): ParserState {
 		let ret = this.canParseWith(ChoiceParser.OPEN_LIST, ChoiceParser.CLOSE_LIST, ChoiceParser.REG_EX, "choice parser");
@@ -498,9 +508,11 @@ class ChoiceParser extends ComponentParser {
 			trkType = new Choice(normal, ...state.items);
 		else if (state.attr.type === 1)
 			trkType = new HorizontalChoice(...state.items);
-		else if (state.attr.type >= 2) {
-			let type = state.attr.type === 2 ? "all" : "any";
-			trkType = new MultipleChoice(normal, type, ...state.items);
+		else if (state.attr.type === 2 || state.attr.type === 3) {
+				let type = state.attr.type === 2 ? "all" : "any";
+				trkType = new MultipleChoice(normal, type, ...state.items);
+		} else {
+				trkType = new Group(...state.items);
 		}
 		return trkType;
 	}
