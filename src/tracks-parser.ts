@@ -40,18 +40,9 @@ pragmas:
 	@esc<char>	set character
  */
 
-import {
-	Options, ConfigListener,
-	Diagramable,
-	Component, FakeSVG,
-	TrackDiagram, Diagram,
-	Sequence, Stack, AlternatingSequence, OptionalSequence,
-	Choice, HorizontalChoice, MultipleChoice, 
-	Optional, OneOrMore, 
-	Terminal, NonTerminal, Start, End, Skip, Comment, Block, Group
-} from './tracks-model.js';
+import { evalScript } from './tracks-functional.js';
+import { AlternatingSequence, Block, Choice, Comment, Component, ConfigListener, Diagram, Diagramable, End, Group, HorizontalChoice, MultipleChoice, NonTerminal, OneOrMore, Optional, OptionalSequence, Options, Sequence, Skip, Stack, Start, Terminal, TracksDiagram } from './tracks-model.js';
 
-import {evalScript} from './tracks-functional.js';
 
 export class ParserManager {
 	context = new ParserReadContext();
@@ -77,7 +68,7 @@ export class ParserManager {
 		if (items.length === 1 && (<Diagramable><unknown>items[0]).implementsDiagramable)
 			diag = (<Diagramable><unknown>items[0]);
 		else
-			diag = this.targetTracksDiagram ? new TrackDiagram(...items): new Diagram(...items);
+			diag = this.targetTracksDiagram ? new TracksDiagram(...items): new Diagram(...items);
 		return diag;
 	}
 
@@ -792,7 +783,7 @@ class RepeatParser extends ComponentParser {
 		state.attr.showArrow = false;
 		if (match) {
 			state.attr.showArrow = true;
-			this.ctx.readIn(OptionalParser.PREFER_DELIM.length);
+			this.ctx.readIn(RepeatParser.ARROW_DELIM.length);
 			this.ctx.skipWhitespace();
 		}
 		while (this.ctx.hasMore()) {

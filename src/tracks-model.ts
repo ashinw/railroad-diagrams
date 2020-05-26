@@ -45,28 +45,28 @@ export interface ConfigListener {
 	onElementAdded(child: HTMLElement, parent: HTMLElement): void;
 }
 
-class Configuration {
-	DEBUG= false; // if true; writes some debug information into attributes
-	VS= 8; // minimum vertical separation between things. For a 3px stroke; must be at least 4
-	AR= 10; // radius of arcs
-	DIAGRAM_CLASS= 'tracks'; // class to put on the root <svg>
-	STROKE_ODD_PIXEL_LENGTH= true; // is the stroke width an odd (1px; 3px; etc) pixel length?
-	INTERNAL_ALIGNMENT= 'center'; // how to align items when they have extra space. left/right/center
-	CHAR_WIDTH= 8.5; // width of each monospace character. play until you find the right value for your font
-	COMMENT_CHAR_WIDTH= 7; // comments are in smaller text by default
+export class Configuration {
+	public DEBUG= false; // if true; writes some debug information into attributes
+	public VS= 8; // minimum vertical separation between things. For a 3px stroke; must be at least 4
+	public AR= 10; // radius of arcs
+	public DIAGRAM_CLASS= 'tracks'; // class to put on the root <svg>
+	public STROKE_ODD_PIXEL_LENGTH= true; // is the stroke width an odd (1px; 3px; etc) pixel length?
+	public INTERNAL_ALIGNMENT= 'center'; // how to align items when they have extra space. left/right/center
+	public CHAR_WIDTH= 8.5; // width of each monospace character. play until you find the right value for your font
+	public COMMENT_CHAR_WIDTH= 7; // comments are in smaller text by default
 
-	configListeners = new Array<ConfigListener>();
+	public configListeners = new Array<ConfigListener>();
 	
-	notify(child: HTMLElement, parent: HTMLElement) {
+	public notify(child: HTMLElement, parent: HTMLElement): void {
 		if (this.configListeners.length > 0)
 			this.configListeners[this.configListeners.length-1].onElementAdded(child, parent);
 	}
 
-	pushListener(lsnr: ConfigListener) {
+	public pushListener(lsnr: ConfigListener): void {
 		this.configListeners.push(lsnr);
 	}
 
-	popListener() {
+	public popListener(): void {
 		this.configListeners.pop();
 	}
 }
@@ -123,40 +123,40 @@ export const defaultCSS = `
 	}`;
 
 export class FakeSVG {
-	children: any;
-	tagName: string;
-	attrs = {};
-	up: number						= 0;
-	down: number					= 0;
-	height: number				= 0;
-	width: number					= 0;
-	needsSpace: boolean		= true;
+	protected _children: any;
+	protected _tagName: string;
+	public attrs 								= {};
+	public up: number						= 0;
+	public down: number					= 0;
+	public height: number				= 0;
+	public width: number				= 0;
+	public needsSpace: boolean	= true;
 
-	constructor(tagName: string, attrs?: object, text?: string|FakeSVG[]) {
-		this.tagName = tagName;
+	public constructor(tagName: string, attrs?: object, text?: string|FakeSVG[]) {
+		this._tagName = tagName;
 		if (text) 
-			this.children = text;
+			this._children = text;
 		else 
-			this.children = [];
-		this.mergeAttributes(attrs);
+			this._children = [];
+		this._mergeAttributes(attrs);
 	}
 
-	protected mergeAttributes(attrs?: object): Object {
+	protected _mergeAttributes(attrs?: object): Object {
 		if (attrs)
 			this.attrs = {...this.attrs, ...attrs};	// merge
 		return this.attrs;
 	}
 
-	format(): FakeSVG;
-	format(x?: number,y?: number): FakeSVG;
-	format(x?: number,y?: number,width?: number): FakeSVG;
-	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
+	public format(): FakeSVG;
+	public format(x?: number,y?: number): FakeSVG;
+	public format(x?: number,y?: number,width?: number): FakeSVG;
+	public format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
 			throw new Error("FakeSVG.format() is an overloaded method intended to be overridden by subclasses");
 	}
 
-	addTo(parent:FakeSVG | Node): any {
+	public addTo(parent:FakeSVG | Node): any {
 		if(parent instanceof FakeSVG) {
-			parent.children.push(this);
+			parent._children.push(this);
 			return this;
 		} else {
 			var svg = this.toSVG();
@@ -165,12 +165,12 @@ export class FakeSVG {
 		}
 	}
 
-	toSVG(): any {
-		var el = SVG(this.tagName, this.attrs);
-		if(typeof this.children == 'string') {
-			el.textContent = this.children;
+	public toSVG(): any {
+		var el = SVG(this._tagName, this.attrs);
+		if(typeof this._children == 'string') {
+			el.textContent = this._children;
 		} else {
-			this.children.forEach(function(e) {
+			this._children.forEach(function(e) {
 				let svg = e.toSVG();
 				el.appendChild(svg);
 				Options.notify(svg, <HTMLElement> el);
@@ -179,63 +179,63 @@ export class FakeSVG {
 		return el;
 	}
 
-	toString(): string {
-		var str = '<' + this.tagName;
-		var group = this.tagName == "g" || this.tagName == "svg";
+	public toString(): string {
+		var str = '<' + this._tagName;
+		var group = this._tagName == "g" || this._tagName == "svg";
 		for(var attr in this.attrs) {
 			str += ' ' + attr + '="' + (this.attrs[attr]+'').replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"';
 		}
 		str += '>';
 		if(group) str += "\n";
-		if(typeof this.children == 'string') {
-			str += escapeString(this.children);
+		if(typeof this._children == 'string') {
+			str += escapeString(this._children);
 		} else {
-			this.children.forEach(function(e) {
+			this._children.forEach(function(e) {
 				str += e;
 			});
 		}
-		str += '</' + this.tagName + '>\n';
+		str += '</' + this._tagName + '>\n';
 		return str;
 	}
 
-	walk(cb): void {
+	public walk(cb): void {
 		cb(this)
 	}
 }
 
-export class PathAttributes {
-		d: string;
+export interface PathAttributes {
+	d: string;
 }
 
 export class Path extends FakeSVG {
-	constructor(x: number, y:number) {
+	public constructor(x: number, y:number) {
 		super('path', {d: "M"+x+' '+y});
 	}
 	
-	m(x: number,y:number) {
+	public m(x: number,y:number): Path {
 		(<PathAttributes>this.attrs).d += 'm'+x+' '+y;
 		return this;
 	}
 	
-	h(val:number) {
+	public h(val:number): Path {
 		(<PathAttributes>this.attrs).d += 'h'+val;
 		return this;
 	}
 	
-	right(val:number) { return this.h(Math.max(0, val)); }
+	public right(val:number): Path { return this.h(Math.max(0, val)); }
 	
-	left(val:number) { return this.h(-Math.max(0, val)); }
+	public left(val:number): Path { return this.h(-Math.max(0, val)); }
 	
-	v(val:number) {
+	public v(val:number): Path {
 		(<PathAttributes>this.attrs).d += 'v'+val;
 		return this;
 	}
 	
-	downFn(val:number) { return this.v(Math.max(0, val)); }
+	public downFn(val:number): Path { return this.v(Math.max(0, val)); }
 	
-	upFn(val:number) { return this.v(-Math.max(0, val)); }
+	public upFn(val:number): Path { return this.v(-Math.max(0, val)); }
 
-	arc(sweep: string): Path {
+	public arc(sweep: string): Path {
 		// 1/4 of a circle
 		var x = Options.AR;
 		var y = Options.AR;
@@ -255,7 +255,7 @@ export class Path extends FakeSVG {
 		return this;
 	}
 
-	arc_8(start: string, dir: string): Path {
+	public arc_8(start: string, dir: string): Path {
 		// 1/8 of a circle
 		const arc = Options.AR;
 		const s2 = 1/Math.sqrt(2) * arc;
@@ -285,12 +285,12 @@ export class Path extends FakeSVG {
 		return this;
 	}
 
-	l(x: number,y:number): Path {
+	public l(x: number,y:number): Path {
 		(<PathAttributes>this.attrs).d += 'l'+x+' '+y;
 		return this;
 	}
 
-	format(): Path {
+	public format(): Path {
 		// All paths in this library start/end horizontally.
 		// The extra .5 ensures a minor overlap, so there's no seams in bad rasterizers.
 		(<PathAttributes>this.attrs).d += 'h.5';
@@ -298,28 +298,27 @@ export class Path extends FakeSVG {
 	}
 }
 
-
-class LruCache<K, T> {
-	private values: Map<K, T> = new Map<K, T>();
-	private maxEntries: number = 20;
+export class LruCache<K, T> {
+	protected _values: Map<K, T> = new Map<K, T>();
+	protected _maxEntries: number = 20;
 
 	public get(key: K): T {
-		const hasKey = this.values.has(key);
+		const hasKey = this._values.has(key);
 		let entry: T;
 		if (hasKey) {
-			entry = this.values.get(key);
-			this.values.delete(key);
-			this.values.set(key, entry);
+			entry = this._values.get(key);
+			this._values.delete(key);
+			this._values.set(key, entry);
 		}
 		return entry;
 	}
 
 	public put(key: K, value: T) {
-		if (this.values.size >= this.maxEntries) {
-			const keyToDelete = this.values.keys().next().value;
-			this.values.delete(keyToDelete);
+		if (this._values.size >= this._maxEntries) {
+			const keyToDelete = this._values.keys().next().value;
+			this._values.delete(keyToDelete);
 		}
-		this.values.set(key, value);
+		this._values.set(key, value);
 	}
 }	
 
@@ -330,19 +329,19 @@ export abstract class Component extends FakeSVG {
 	private static SAVINGS_COUNT = 0;
 	private static CALL_COUNT = 0;
 
-	parentContainer: Container;
-	previous: Component;
-	next: Component;
+	public parentContainer: Container;
+	public previous: Component;
+	public next: Component;
 
-	isEntrySupported(): boolean {
+	public isEntrySupported(): boolean {
 		return true;
 	}
 
-	isExitSupported(): boolean {
+	public isExitSupported(): boolean {
 		return true;
 	}
 
-	canConnectUpline(): boolean {
+	public canConnectUpline(): boolean {
 		let ret = Component.CONNECTION_UPLINE_CACHE.get(this);
 		if (ret === undefined) {
 			ret = (this.isEntrySupported() 
@@ -354,7 +353,7 @@ export abstract class Component extends FakeSVG {
 		return ret;
 	}
 
-	canConnectDownline(): boolean {
+	public canConnectDownline(): boolean {
 		let ret = Component.CONNECTION_DNLINE_CACHE.get(this);
 		if (ret === undefined) {
 			ret = (this.isExitSupported() 
@@ -367,33 +366,38 @@ export abstract class Component extends FakeSVG {
 	}
 }
 
-
-interface Containable {
-	implementsContainable();
+export interface Containable {
+	implementsContainable(): void;
+	getItemCount(): number;
 	getDownlineComponent(childCtx: Component): Component;
 	getUplineComponent(childCtx: Component): Component;
 }
 
+export abstract class Container extends Component implements Containable {
+	protected items: Component[];
 
-abstract class Container extends Component implements Containable {
-	items: Component[];
-
-	constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
+	public constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
 		super(tagName, attrs, text);
-		this.prepareItemsPriorToLinage(items);
-		this.prepareComponentLinage(items);
+		this._prepareItemsPriorToLinage(items);
+		this._prepareComponentLinage(items);
 	}
 
-	implementsContainable() {}
+	public implementsContainable(): void {}
 
-	prepareItemsPriorToLinage(items: (string|Component)[]): void {
+	public getItemCount(): number {
+		if (this.items)
+			return this.items.length;
+		return 0;
+	}
+
+	protected _prepareItemsPriorToLinage(items: (string|Component)[]): void {
 		for (let i = items.length-1; i >= 0 ; i--) {
 			if (!items[i]) // ie. null or undefined or empty string
 				items.splice(i, 1);
 		}
 	}
 
-	protected prepareComponentLinage(items: (string|Component)[]): void {
+	protected _prepareComponentLinage(items: (string|Component)[]): void {
 		this.items = items.map((val: string | Component, i: number, arr: (string | Component)[]) => {
 			let newVal: Component = makeTerminalIfString(val);
 			arr[i] = newVal;
@@ -406,16 +410,16 @@ abstract class Container extends Component implements Containable {
 	}
 
 	// assertion can be removed after sufficient testing
-	protected assertValidLinageVerification(childCtx: Component): void {
+	protected _assertValidLinageVerification(childCtx: Component): void {
 		if (this.items.indexOf(childCtx) === -1)
 			throw new Error(`Invalid argument: linage validation is limited to parent/child relationships`);
 	}
 
-	abstract getDownlineComponent(childCtx: Component): Component;
+	public abstract getDownlineComponent(childCtx: Component): Component;
 
-	abstract getUplineComponent(childCtx: Component): Component;
+	public abstract getUplineComponent(childCtx: Component): Component;
 
-	hasDownlineSupport(childCtx: Component): boolean {
+	public hasDownlineSupport(childCtx: Component): boolean {
 		if (!childCtx.parentContainer)
 			return true;
 		let next = childCtx.parentContainer.getDownlineComponent(childCtx);
@@ -425,7 +429,7 @@ abstract class Container extends Component implements Containable {
 		return childCtx.parentContainer.hasDownlineSupport(childCtx.parentContainer); 
 	}
 
-	hasUplineSupport(childCtx: Component): boolean {
+	public hasUplineSupport(childCtx: Component): boolean {
 		if (!childCtx.parentContainer)
 			return true;
 		let previous = childCtx.parentContainer.getUplineComponent(childCtx);
@@ -435,57 +439,56 @@ abstract class Container extends Component implements Containable {
 		return childCtx.parentContainer.hasUplineSupport(childCtx.parentContainer); 
 	}
 
-	walk(cb): void {
+	public walk(cb): void {
 		cb(this);
 		this.items.forEach(x=>x.walk(cb));
 	}
 }
 
-
-interface Sequenceable {
-	implementsSequenceable();
+export interface Sequenceable {
+	implementsSequenceable(): void;
 	// NB: threaded sequences (eg. alternating sequence) have a different
 	// isEntry|ExitSupported & Up|Down line acquisition strategy
 	isThreaded(): boolean;
 }
 
 
-class SequenceableContainer extends Container implements Sequenceable {
-	constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
+export class SequenceableContainer extends Container implements Sequenceable {
+	public constructor(items: (string|Component)[], tagName: string, attrs?: object, text?: string | FakeSVG[]) {
 		super(items, tagName, attrs, text);
 	}
 
-	implementsSequenceable() {}
+	public implementsSequenceable(): void {}
 
-	isThreaded(): boolean {
+	public isThreaded(): boolean {
 		return false;
 	}
 
-	isEntrySupported(): boolean {
+	public isEntrySupported(): boolean {
 		let ret = this.items[0].isEntrySupported();
 		return ret;
 	}
 
-	isExitSupported(): boolean {
+	public isExitSupported(): boolean {
 		let ret = this.items[this.items.length-1].isExitSupported();
 		return ret;
 	}
 
-	getDownlineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getDownlineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		if (childCtx.next)
 			return childCtx.next;
 		return undefined;
 	}
 
-	getUplineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getUplineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		if (childCtx.previous)
 			return childCtx.previous;
 		return undefined;
 	}
 
-	refreshSequentially(): void {
+	protected _refreshSequentially(): void {
 		for(const item of this.items) {
 			this.width += item.width + (item.needsSpace?20:0);
 			this.up = Math.max(this.up, item.up - this.height);
@@ -494,23 +497,23 @@ class SequenceableContainer extends Container implements Sequenceable {
 		}
 	}
 
-	formatSequentially(target: FakeSVG, x?: number,y?: number,width?: number): FakeSVG {
+	protected _formatSequentially(target: FakeSVG, x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
-		x = this.formatEntryExits(width, x, y, target);
+		x = this._formatEntryExits(width, x, y, target);
 		for(var i = 0; i < this.items.length; i++) {
 			var item = this.items[i];
-			x = this.formatUplineConnection(item, i, x, y, target);
-			this.renderComponent(item, x, y, target);
-			({ x, y } = this.formatDownlineConnection(x, item, y, i, target));
+			x = this._formatUplineConnection(item, i, x, y, target);
+			this._renderComponent(item, x, y, target);
+			({ x, y } = this._formatDownlineConnection(x, item, y, i, target));
 		}
 		return this;
 	}
 
-	protected renderComponent(item: Component, x: number, y: number, target: FakeSVG) {
+	protected _renderComponent(item: Component, x: number, y: number, target: FakeSVG): void {
 		item.format(x, y, item.width).addTo(target);
 	}
 
-	protected formatDownlineConnection(x: number, item: Component, y: number, i: number, target: FakeSVG) {
+	protected _formatDownlineConnection(x: number, item: Component, y: number, i: number, target: FakeSVG): {x: number, y: number} {
 		x += item.width;
 		y += item.height;
 		if (item.needsSpace && i < this.items.length - 1) {
@@ -522,7 +525,7 @@ class SequenceableContainer extends Container implements Sequenceable {
 		return { x, y };
 	}
 
-	protected formatUplineConnection(item: Component, i: number, x: number, y: number, target: FakeSVG) {
+	protected _formatUplineConnection(item: Component, i: number, x: number, y: number, target: FakeSVG): number {
 		if (item.needsSpace && i > 0) {
 			if (item.canConnectUpline()) {
 				new Path(x, y).h(10).addTo(target);
@@ -532,7 +535,7 @@ class SequenceableContainer extends Container implements Sequenceable {
 		return x;
 	}
 
-	protected formatEntryExits(width: number, x: number, y: number, target: FakeSVG): number {
+	protected _formatEntryExits(width: number, x: number, y: number, target: FakeSVG): number {
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
 			new Path(x, y).h(gaps[0]).addTo(target);
@@ -545,9 +548,8 @@ class SequenceableContainer extends Container implements Sequenceable {
 	}
 }
 
-
 export interface Diagramable {
-	implementsDiagramable();
+	implementsDiagramable(): void;
 
 	getItems(): Component[];
 	isFormatted(): boolean;
@@ -557,42 +559,42 @@ export interface Diagramable {
 	toString(): any;
 }
 
+export class TracksDiagram extends SequenceableContainer implements Diagramable {
+	protected _formatted: boolean = false;
+	protected _extraViewboxHeight= 0;
 
-export class TrackDiagram extends SequenceableContainer implements Diagramable {
-	formatted: boolean = false;
-	extraViewboxHeight= 0;
-	constructor(...items) {
+	public constructor(...items) {
 		super(items, 'svg', {class: Options.DIAGRAM_CLASS}, undefined);
 		this.needsSpace = false;
-		this.refreshSequentially();
+		this._refreshSequentially();
 	}
 
-	implementsDiagramable() {}
+	public implementsDiagramable(): void {}
 
-	getItems(): Component[] {
+	public getItems(): Component[] {
 		return this.items;
 	}
 
-	isFormatted(): boolean {
-		return this.formatted;
+	public isFormatted(): boolean {
+		return this._formatted;
 	}
 
-	refresh(): void {
-		super.refreshSequentially();
-		this.formatted = false;
+	public refresh(): void {
+		super._refreshSequentially();
+		this._formatted = false;
 	}
 
-	protected formatEntryExits(width: number, x: number, y: number, target: FakeSVG): number {
+	protected _formatEntryExits(width: number, x: number, y: number, target: FakeSVG): number {
 		return x;	// nothing to do
 	}
 
-	protected renderComponent(item: Component, x: number, y: number, target: FakeSVG) {
-		super.renderComponent(item, x, y, target);
+	protected _renderComponent(item: Component, x: number, y: number, target: FakeSVG): void {
+		super._renderComponent(item, x, y, target);
 		if (item instanceof Choice) // diagram viewbox height defect for Choice/Stack combo
-			this.extraViewboxHeight += item.extraHeight ? item.extraHeight: 0; 
+			this._extraViewboxHeight += item.extraHeight ? item.extraHeight: 0; 
 	}
 
-	format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
+	public format(paddingt?: number, paddingr?: number, paddingb?: number, paddingl?: number): FakeSVG {
 		paddingt = unnull(paddingt, 20);
 		paddingr = unnull(paddingr, paddingt, 20);
 		paddingb = unnull(paddingb, paddingt, 20);
@@ -601,20 +603,20 @@ export class TrackDiagram extends SequenceableContainer implements Diagramable {
 		var y = paddingt;
 		y += this.up;
 		var g = new FakeSVG('g', Options.STROKE_ODD_PIXEL_LENGTH ? {transform:'translate(.5 .5)'} : {});
-		this.extraViewboxHeight = 0; 		
-		this.formatSequentially(g, x, y, this.width);
+		this._extraViewboxHeight = 0; 		
+		this._formatSequentially(g, x, y, this.width);
 		let _width = this.width + paddingl + paddingr;
-		let _height = this.up + this.height + this.down + paddingt + paddingb + this.extraViewboxHeight;
-		this.mergeAttributes({
+		let _height = this.up + this.height + this.down + paddingt + paddingb + this._extraViewboxHeight;
+		this._mergeAttributes({
 				width: _width, height: _height,
 				viewBox: `0 0 ${_width} ${_height}`
 			});
 		g.addTo(this);
-		this.formatted = true;
+		this._formatted = true;
 		return this;
 	}
 
-	addTo(parent?:FakeSVG | Node): any {
+	public addTo(parent?:FakeSVG | Node): any {
 		if(!parent) {
 			var scriptTag = document.getElementsByTagName('script');
 			let scriptTagItem = scriptTag[scriptTag.length - 1];
@@ -623,39 +625,38 @@ export class TrackDiagram extends SequenceableContainer implements Diagramable {
 		return super.addTo(parent);
 	}
 
-	toSVG(): any {
-		if (!this.formatted) {
+	public toSVG(): any {
+		if (!this._formatted) {
 			this.format();
 		}
 		return super.toSVG();
 	}
 
-	toString(): string {
-		if (!this.formatted) {
+	public toString(): string {
+		if (!this._formatted) {
 			this.format();
 		}
 		return super.toString();
 	}	
 
-	toStandalone(style): string {
-		if(!this.formatted) {
+	public toStandalone(style): string {
+		if(!this._formatted) {
 			this.format();
 		}
 		const s = new FakeSVG('style', {}, style || defaultCSS);
-		this.children.push(s);
+		this._children.push(s);
 		this.attrs['xmlns'] = "http://www.w3.org/2000/svg";
 		this.attrs['xmlns:xlink'] = "http://www.w3.org/1999/xlink";
 		const result = super.toString.call(this);
-		this.children.pop();
+		this._children.pop();
 		delete this.attrs['xmlns'];
 		return result;
 	}	
 } 
-funcs.TrackDiagram = (...args)=>new TrackDiagram(...args);
+funcs.TrackDiagram = (...args)=>new TracksDiagram(...args);
 
-
-export class Diagram extends TrackDiagram {
-	prepareItemsPriorToLinage(items: (string|Component)[]): void {
+export class Diagram extends TracksDiagram {
+	protected _prepareItemsPriorToLinage(items: (string|Component)[]): void {
 		if(!(items[0] instanceof Start)) {
 			items.unshift(new Start());
 		}
@@ -666,26 +667,23 @@ export class Diagram extends TrackDiagram {
 }
 funcs.Diagram = (...args)=>new Diagram(...args);
 
-
 export class ComplexDiagram extends Diagram {
-	prepareItemsPriorToLinage(items: (string|Component)[]): void {
-		super.prepareItemsPriorToLinage(items);
+	protected _prepareItemsPriorToLinage(items: (string|Component)[]): void {
+		super._prepareItemsPriorToLinage(items);
 		(<Start>this.items[0]).type = "complex";
 		(<End>this.items[this.items.length-1]).type = "complex";
 	}
 }
 funcs.ComplexDiagram = (...args)=>new ComplexDiagram(...args);
 
-
-interface Conditionable {
-	implementsConditionable();
+export interface Conditionable {
+	implementsConditionable(): void;
 	// consider using -2 for all, -1 for any, 0 - none, 1... for selection 
 	getDefaultIndex(): number;
 }
 
-
-interface Repeatable {
-	implementsRepeatable();
+export interface Repeatable {
+	implementsRepeatable(): void;
 
 	// services that likely require extension considerations
 	isThreaded(): boolean;
@@ -694,15 +692,13 @@ interface Repeatable {
 	getUplineComponent(childCtx: Component): Component;
 }
 
-
-class Control extends Component {
+export class Control extends Component {
 }
 
-
 export class Sequence extends SequenceableContainer implements Sequenceable {
-	constructor(...items: (string|Component)[]) {
+	public constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
-		this.refreshSequentially();
+		this._refreshSequentially();
 		if (this.items.length > 0) {
 			if (this.items[0].needsSpace)
 				this.width -= 10;
@@ -715,15 +711,14 @@ export class Sequence extends SequenceableContainer implements Sequenceable {
 		}
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
-		return this.formatSequentially(this, x, y, width);
+	public format(x?: number,y?: number,width?: number): FakeSVG {
+		return this._formatSequentially(this, x, y, width);
 	}
 }
 funcs.Sequence = (...args)=>new Sequence(...args);
 
-
 export class Stack extends SequenceableContainer implements Sequenceable {
-	constructor(...items: (string|Component)[]) {
+	public constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if( items.length === 0 ) {
 			throw new RangeError("Stack() must have at least one child.");
@@ -753,7 +748,7 @@ export class Stack extends SequenceableContainer implements Sequenceable {
 		}
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
 				new Path(x,y).h(gaps[0]).addTo(this);
@@ -800,9 +795,8 @@ export class Stack extends SequenceableContainer implements Sequenceable {
 }
 funcs.Stack = (...args)=>new Stack(...args);
 
-
 export class OptionalSequence extends SequenceableContainer implements Sequenceable, Conditionable {
-	constructor(...items: (string|Component)[]) {
+	public constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if( items.length === 0 ) {
 			throw new RangeError("OptionalSequence() must have at least one child.");
@@ -838,14 +832,14 @@ export class OptionalSequence extends SequenceableContainer implements Sequencea
 		}
 	}
 
-	implementsSequenceable() {}
-	implementsConditionable() {}
+	public implementsSequenceable(): void {}
+	public implementsConditionable(): void {}
 
-	getDefaultIndex(): number {
+	public getDefaultIndex(): number {
 		return -1;
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		var arc = Options.AR;
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
@@ -960,9 +954,8 @@ export class OptionalSequence extends SequenceableContainer implements Sequencea
 }
 funcs.OptionalSequence = (...args)=>new OptionalSequence(...args);
 
-
 export class AlternatingSequence extends SequenceableContainer implements Sequenceable {
-	constructor(...items: (string|Component)[]) {
+	public constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if( items.length === 1 ) {
 			 // rather than use delegation and lose the intended feature add an empty
@@ -1001,11 +994,11 @@ export class AlternatingSequence extends SequenceableContainer implements Sequen
 		}
 	}
 
-	isThreaded(): boolean {
+	public isThreaded(): boolean {
 		return this.items.length > 1;
 	}
 
-	isEntrySupported(): boolean {
+	public isEntrySupported(): boolean {
 		let ret = super.isEntrySupported(); 
 		if (ret) 
 			return ret;
@@ -1014,7 +1007,7 @@ export class AlternatingSequence extends SequenceableContainer implements Sequen
 		return ret;
 	}
 
-	isExitSupported(): boolean {
+	public isExitSupported(): boolean {
 		let ret = super.isExitSupported(); 
 		if (ret) 
 			return ret;
@@ -1023,19 +1016,19 @@ export class AlternatingSequence extends SequenceableContainer implements Sequen
 		return ret;
 	}
 
-	getDownlineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getDownlineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		// go up a level and try parent's next sibling
 		return childCtx.parentContainer.next; 
 	}
 
-	getUplineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getUplineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		// go up a level and try parent's previous sibling
 		return childCtx.parentContainer.previous; 
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		const arc = Options.AR;
 		const gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
@@ -1086,13 +1079,12 @@ export class AlternatingSequence extends SequenceableContainer implements Sequen
 }
 funcs.AlternatingSequence = (...args)=>new AlternatingSequence(...args);
 
+export abstract class ConditionableContainer extends Container implements Conditionable {
+	public abstract getDefaultIndex(): number;
 
-abstract class ConditionableContainer extends Container implements Conditionable {
-	abstract getDefaultIndex(): number;
+	public implementsConditionable(): void {}
 
-	implementsConditionable() {}
-
-	isEntrySupported(): boolean {
+	public isEntrySupported(): boolean {
 		for (let i = 0; i < this.items.length; i++) {
 			// need at least one
 			if (this.items[i].isEntrySupported())	
@@ -1101,7 +1093,7 @@ abstract class ConditionableContainer extends Container implements Conditionable
 		return false;
 	}
 
-	isExitSupported(): boolean {
+	public isExitSupported(): boolean {
 		for (let i = 0; i < this.items.length; i++) {
 			// need at least one
 			if (this.items[i].isExitSupported())	
@@ -1110,29 +1102,29 @@ abstract class ConditionableContainer extends Container implements Conditionable
 		return false;
 	}
 
-	getDownlineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getDownlineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		return childCtx.parentContainer.next; // go up a level and try parent's next sibling
 	}
 
-	getUplineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getUplineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		return childCtx.parentContainer.previous; // go up a level and try parent's previous sibling
 	}
 }
 
-
 export class Choice extends ConditionableContainer implements Conditionable {
-	normal: number;
-	extraHeight = 0;
-	constructor(normal: number, ...items: (string|Component)[]) {
+	protected _normal: number;
+	public extraHeight = 0;
+
+	public constructor(normal: number, ...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if( typeof normal !== "number" || normal !== Math.floor(normal) ) {
 			throw new TypeError("The first argument of Choice() must be an integer.");
 		} else if(normal < 0 || normal >= items.length) {
 			throw new RangeError("The first argument of Choice() must be an index for one of the items.");
 		} else {
-			this.normal = normal;
+			this._normal = normal;
 		}
 		var first = 0;
 		var last = items.length - 1;
@@ -1158,11 +1150,11 @@ export class Choice extends ConditionableContainer implements Conditionable {
 		}
 	}
 
-	getDefaultIndex(): number {
-		return this.normal;
+	public getDefaultIndex(): number {
+		return this._normal;
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
@@ -1176,10 +1168,10 @@ export class Choice extends ConditionableContainer implements Conditionable {
 		var last = this.items.length -1;
 		var innerWidth = this.width - Options.AR*4;
 		var distanceFromY;
-		for(var i = this.normal - 1; i >= 0; i--) {
+		for(var i = this._normal - 1; i >= 0; i--) {
 			let item = this.items[i];
-			if( i == this.normal - 1 ) {
-				distanceFromY = Math.max(Options.AR*2, this.items[this.normal].up + Options.VS + item.down + item.height);
+			if( i == this._normal - 1 ) {
+				distanceFromY = Math.max(Options.AR*2, this.items[this._normal].up + Options.VS + item.down + item.height);
 			}
 			if (item.canConnectUpline()) {
 				new Path(x,y)
@@ -1196,7 +1188,7 @@ export class Choice extends ConditionableContainer implements Conditionable {
 		}
 			distanceFromY += Math.max(Options.AR, item.up + Options.VS + (i === 0 ? 0 : this.items[i-1].down+this.items[i-1].height));
 		}
-		let item = this.items[this.normal];
+		let item = this.items[this._normal];
 		// Do the straight-line path. (normals is skip)
 		if (item.canConnectUpline()) {
 			new Path(x,y).right(Options.AR*2).addTo(this);
@@ -1207,10 +1199,10 @@ export class Choice extends ConditionableContainer implements Conditionable {
 		}
 
 		// Do the elements that curve below
-		for(i = this.normal+1; i <= last; i++) {
+		for(i = this._normal+1; i <= last; i++) {
 			let item = this.items[i];
-			if( i == this.normal + 1 ) {
-				distanceFromY = Math.max(Options.AR*2, this.height + this.items[this.normal].down + Options.VS + item.up);
+			if( i == this._normal + 1 ) {
+				distanceFromY = Math.max(Options.AR*2, this.height + this.items[this._normal].down + Options.VS + item.up);
 			}
 			if (item.canConnectUpline()) {
 				new Path(x,y)
@@ -1220,7 +1212,7 @@ export class Choice extends ConditionableContainer implements Conditionable {
 			}
 			item.format(x+Options.AR*2, y+distanceFromY, innerWidth).addTo(this);
 			if (item instanceof Stack)
-				this.extraHeight = 40 * item.items.length; // there is a defect with diagram viewbox height for Choice/Stack combo
+				this.extraHeight = 40 * item.getItemCount(); // there is a defect with diagram viewbox height for Choice/Stack combo
 			if (item.canConnectDownline()) {
 				new Path(x+Options.AR*2+innerWidth, y+distanceFromY+item.height)
 					.arc('se')
@@ -1234,11 +1226,11 @@ export class Choice extends ConditionableContainer implements Conditionable {
 }
 funcs.Choice = (n,...args)=>new Choice(n,...args);
 
-
 export class HorizontalChoice extends ConditionableContainer implements Conditionable {
-	_upperTrack: number;
-	_lowerTrack: number;
-	constructor(...items: (string|Component)[]) {
+	protected _upperTrack: number;
+	protected _lowerTrack: number;
+
+	public constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if( items.length === 0 ) {
 			throw new RangeError("HorizontalChoice() must have at least one child.");
@@ -1288,11 +1280,11 @@ export class HorizontalChoice extends ConditionableContainer implements Conditio
 		}
 	}
 	
-	getDefaultIndex(): number {
+	public getDefaultIndex(): number {
 		return 0;
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
@@ -1403,28 +1395,28 @@ export class HorizontalChoice extends ConditionableContainer implements Conditio
 }
 funcs.HorizontalChoice = (...args: any[])=>new HorizontalChoice(...args);
 
-
 export class MultipleChoice extends ConditionableContainer implements Conditionable {
-	normal: number;
-	type: any;
-	innerWidth: any;
-	constructor(normal: number, type: string, ...items: (string|Component)[]) {
+	protected _normal: number;
+	protected _type: any;
+	protected _innerWidth: any;
+	
+	public constructor(normal: number, type: string, ...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if( typeof normal !== "number" || normal !== Math.floor(normal) ) {
 			throw new TypeError("The first argument of MultipleChoice() must be an integer.");
 		} else if(normal < 0 || normal >= items.length) {
 			throw new RangeError("The first argument of MultipleChoice() must be an index for one of the items.");
 		} else {
-			this.normal = normal;
+			this._normal = normal;
 		}
 		if( type != "any" && type != "all" ) {
 			throw new SyntaxError("The second argument of MultipleChoice must be 'any' or 'all'.");
 		} else {
-			this.type = type;
+			this._type = type;
 		}
 		this.needsSpace = true;
-		this.innerWidth = max(this.items, function(x){return x.width});
-		this.width = 30 + Options.AR + this.innerWidth + Options.AR + 20;
+		this._innerWidth = max(this.items, function(x){return x.width});
+		this.width = 30 + Options.AR + this._innerWidth + Options.AR + 20;
 		this.up = this.items[0].up;
 		this.down = this.items[this.items.length-1].down;
 		this.height = this.items[normal].height;
@@ -1446,11 +1438,11 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 		}
 	}
 
-	getDefaultIndex(): number {
-		return this.normal;
+	public getDefaultIndex(): number {
+		return this._normal;
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
 			new Path(x, y).right(gaps[0]).addTo(this);
@@ -1460,20 +1452,20 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 		}
 		x += gaps[0];
 
-		var normal = this.items[this.normal];
+		var normal = this.items[this._normal];
 
 		// Do the elements that curve above
 		var distanceFromY;
-		for(var i = this.normal - 1; i >= 0; i--) {
+		for(var i = this._normal - 1; i >= 0; i--) {
 			var item = this.items[i];
-			if( i == this.normal - 1 ) {
+			if( i == this._normal - 1 ) {
 				distanceFromY = Math.max(10 + Options.AR, normal.up + Options.VS + item.down + item.height);
 			}
 			new Path(x + 30,y)
 				.upFn(distanceFromY - Options.AR)
 				.arc('wn').addTo(this);
-			item.format(x + 30 + Options.AR, y - distanceFromY, this.innerWidth).addTo(this);
-			new Path(x + 30 + Options.AR + this.innerWidth, y - distanceFromY + item.height)
+			item.format(x + 30 + Options.AR, y - distanceFromY, this._innerWidth).addTo(this);
+			new Path(x + 30 + Options.AR + this._innerWidth, y - distanceFromY + item.height)
 				.arc('ne')
 				.downFn(distanceFromY - item.height + this.height - Options.AR - 10)
 				.addTo(this);
@@ -1485,13 +1477,13 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 		if (normal.canConnectUpline()) {
 			new Path(x + 30, y).right(Options.AR).addTo(this);
 		}
-		normal.format(x + 30 + Options.AR, y, this.innerWidth).addTo(this);
+		normal.format(x + 30 + Options.AR, y, this._innerWidth).addTo(this);
 		if (normal.canConnectDownline()) {
-			new Path(x + 30 + Options.AR + this.innerWidth, y + this.height).right(Options.AR).addTo(this);
+			new Path(x + 30 + Options.AR + this._innerWidth, y + this.height).right(Options.AR).addTo(this);
 		}
-		for(i = this.normal+1; i < this.items.length; i++) {
+		for(i = this._normal+1; i < this.items.length; i++) {
 			let item = this.items[i];
-			if(i == this.normal + 1) {
+			if(i == this._normal + 1) {
 				distanceFromY = Math.max(10+Options.AR, normal.height + normal.down + Options.VS + item.up);
 			}
 			if (item.canConnectUpline()) {
@@ -1500,9 +1492,9 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 				.arc('ws')
 				.addTo(this);
 			}
-			item.format(x + 30 + Options.AR, y + distanceFromY, this.innerWidth).addTo(this);
+			item.format(x + 30 + Options.AR, y + distanceFromY, this._innerWidth).addTo(this);
 			if (item.canConnectDownline()) {
-				new Path(x + 30 + Options.AR + this.innerWidth, y + distanceFromY + item.height)
+				new Path(x + 30 + Options.AR + this._innerWidth, y + distanceFromY + item.height)
 				.arc('se')
 				.upFn(distanceFromY - Options.AR + item.height - normal.height)
 				.addTo(this);
@@ -1512,7 +1504,7 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 			}
 		}
 		var text = new FakeSVG('g', {"class": "diagram-text"}).addTo(this);
-		new FakeSVG('title', {}, (this.type=="any"?"take one or more branches, once each, in any order":"take all branches, once each, in any order")).addTo(text);
+		new FakeSVG('title', {}, (this._type=="any"?"take one or more branches, once each, in any order":"take all branches, once each, in any order")).addTo(text);
 		new FakeSVG('path', {
 			"d": "M "+(x+30)+" "+(y-10)+" h -26 a 4 4 0 0 0 -4 4 v 12 a 4 4 0 0 0 4 4 h 26 z",
 			"class": "diagram-text"
@@ -1521,7 +1513,7 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 			"x": x + 15,
 			"y": y + 4,
 			"class": "diagram-text"
-			}, (this.type=="any"?"1+":"all")).addTo(text);
+			}, (this._type=="any"?"1+":"all")).addTo(text);
 		new FakeSVG('path', {
 			"d": "M "+(x+this.width-20)+" "+(y-10)+" h 16 a 4 4 0 0 1 4 4 v 12 a 4 4 0 0 1 -4 4 h -16 z",
 			"class": "diagram-text"
@@ -1535,61 +1527,59 @@ export class MultipleChoice extends ConditionableContainer implements Conditiona
 }
 funcs.MultipleChoice = (n: number, t: string, ...args)=>new MultipleChoice(n, t, ...args);
 
-
 export class Optional extends Choice implements Conditionable {
-	constructor(item: Component, skip: string|undefined) {
+	public constructor(item: Component, skip: string|undefined) {
 		super(skip === undefined ? 1: 0, new Skip(), item);
 	}
 }
 funcs.Optional = (item: Component, skip: string|undefined)=>new Optional(item, skip);
 
-
 export class OneOrMore extends SequenceableContainer implements Repeatable {
-	item: Component;
-	rep: Component;
-	showArrow: boolean;
+	protected _item: Component;
+	protected _rep: Component;
+	protected _showArrow: boolean;
 
-	constructor(item: string|Component, rep: string|Component, showArrow=false) {
+	public constructor(item: string|Component, rep: string|Component, showArrow=false) {
 		// super([makeTerminalIfString(item), makeTerminalIfString(rep || (new Skip()))], 'g', {}, undefined);
 		super([item, rep || (new Skip())], 'g', {}, undefined);
-		this.item = this.items[0];
-		this.rep = this.items[1];
-		this.width = Math.max(this.item.width, this.rep.width) + Options.AR*2;
-		this.height = this.item.height;
-		this.up = this.item.up;
-		this.down = Math.max(Options.AR*2, this.item.down + Options.VS + this.rep.up + this.rep.height + this.rep.down);
+		this._item = this.items[0];
+		this._rep = this.items[1];
+		this.width = Math.max(this._item.width, this._rep.width) + Options.AR*2;
+		this.height = this._item.height;
+		this.up = this._item.up;
+		this.down = Math.max(Options.AR*2, this._item.down + Options.VS + this._rep.up + this._rep.height + this._rep.down);
 		this.needsSpace = true;
-		this.showArrow = showArrow;
+		this._showArrow = showArrow;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "oneormore";
 		}
 	}
 
-	implementsRepeatable() {}
+	public implementsRepeatable(): void {}
 
-	isThreaded(): boolean {
+	public isThreaded(): boolean {
 		// only to extent that the return line may have optional nodes
 		return true; 
 	}
 
-	isExitSupported(): boolean {
+	public isExitSupported(): boolean {
 		// note, the repeat journey follows the separator therefore we are only
 		// interested in the mainline of the 1st sequence
 		return this.items[0].isExitSupported(); 
 	}
 
-	getDownlineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getDownlineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		return childCtx.parentContainer.next; // go up a level and try parent's next sibling
 	}
 
-	getUplineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getUplineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		return childCtx.parentContainer.previous; // go up a level and try parent's previous sibling
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
@@ -1601,21 +1591,21 @@ export class OneOrMore extends SequenceableContainer implements Repeatable {
 		x += gaps[0];
 
 		// Draw item
-		if (this.item.canConnectUpline()) {
+		if (this._item.canConnectUpline()) {
 			new Path(x,y).right(Options.AR).addTo(this);
 		}
-		this.item.format(x+Options.AR,y,this.width-Options.AR*2).addTo(this);
-		if (this.item.canConnectDownline()) {
+		this._item.format(x+Options.AR,y,this.width-Options.AR*2).addTo(this);
+		if (this._item.canConnectDownline()) {
 			new Path(x+this.width-Options.AR,y+this.height).right(Options.AR).addTo(this);
 		}
 
 		// Draw repeat arc
-		var distanceFromY = Math.max(Options.AR*2, this.item.height+this.item.down+Options.VS+this.rep.up);
+		var distanceFromY = Math.max(Options.AR*2, this._item.height+this._item.down+Options.VS+this._rep.up);
 		new Path(x+Options.AR,y).arc('nw').downFn(distanceFromY-Options.AR*2).arc('ws').addTo(this);
-		this.rep.format(x+Options.AR, y+distanceFromY, this.width - Options.AR*2).addTo(this);
-		new Path(x+this.width-Options.AR, y+distanceFromY+this.rep.height).arc('se').upFn(distanceFromY-Options.AR*2+this.rep.height-this.item.height).arc('en').addTo(this);
+		this._rep.format(x+Options.AR, y+distanceFromY, this.width - Options.AR*2).addTo(this);
+		new Path(x+this.width-Options.AR, y+distanceFromY+this._rep.height).arc('se').upFn(distanceFromY-Options.AR*2+this._rep.height-this._item.height).arc('en').addTo(this);
 
-		if (this.showArrow) {
+		if (this._showArrow) {
 			var arrowSize = Options.AR/2;
 			// Compensate for the illusion that makes the arrow look unbalanced if it's too close to the curve below it
 			var multiplier = (distanceFromY < arrowSize*5) ? 1.2 : 1;
@@ -1625,37 +1615,37 @@ export class OneOrMore extends SequenceableContainer implements Repeatable {
 		return this;
 	}
 
-	walk(cb): void {
+	public walk(cb): void {
 		cb(this);
-		this.item.walk(cb);
-		this.rep.walk(cb);
+		this._item.walk(cb);
+		this._rep.walk(cb);
 	}	
 }
 funcs.OneOrMore = (item: Component|string, rep: Component|string, arr: boolean)=>new OneOrMore(item, rep, arr);
 
 
 export class Group extends Container {
-	item: Component;
-	label: Component;
-	boxUp: number;
+	protected _item: Component;
+	protected _label: Component;
+	protected _boxUp: number;
 
-	constructor(...items: (string|Component)[]) {
+	public constructor(...items: (string|Component)[]) {
 		super(items, 'g', {}, undefined);
 		if(items.length === 0 || items.length > 2) {
 			throw new RangeError("Group() must have at least one child container and may have an optional label");
 		}
-		this.item = this.items[0];
-		this.label = this.items[1];
+		this._item = this.items[0];
+		this._label = this.items[1];
 		this.width = Math.max(
-			this.item.width + (this.item.needsSpace?20:0),
-			this.label ? this.label.width : 0,
+			this._item.width + (this._item.needsSpace?20:0),
+			this._label ? this._label.width : 0,
 			Options.AR*2);
-		this.height = this.item.height;
-		this.boxUp = this.up = Math.max(this.item.up + Options.VS, Options.AR);
-		if(this.label) {
-			this.up += this.label.up + this.label.height + this.label.down;
+		this.height = this._item.height;
+		this._boxUp = this.up = Math.max(this._item.up + Options.VS, Options.AR);
+		if(this._label) {
+			this.up += this._label.up + this._label.height + this._label.down;
 		}
-		this.down = Math.max(this.item.down + Options.VS, Options.AR);
+		this.down = Math.max(this._item.down + Options.VS, Options.AR);
 		this.needsSpace = true;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
@@ -1663,77 +1653,73 @@ export class Group extends Container {
 		}
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		var gaps = determineGaps(width, this.width);
-		if (this.canConnectUpline()) {
+		// if (this.item.canConnectUpline()) 
 			new Path(x,y).h(gaps[0]).addTo(this);
-		}
-		if (this.canConnectDownline()) {
+		// if (this.item.canConnectDownline()) 
 			new Path(x+gaps[0]+this.width,y+this.height).h(gaps[1]).addTo(this);
-		}
 		x += gaps[0];
 
 		new FakeSVG('rect', {
 			x,
-			y:y-this.boxUp,
+			y:y-this._boxUp,
 			width:this.width,
-			height:this.boxUp + this.height + this.down,
+			height:this._boxUp + this.height + this.down,
 			rx: Options.AR,
 			ry: Options.AR,
 			'class':'group-box',
 		}).addTo(this);
 
-		this.item.format(x,y,this.width).addTo(this);
-		if(this.label) {
-			this.label.format(
+		this._item.format(x,y,this.width).addTo(this);
+		if(this._label) {
+			this._label.format(
 				x,
-				y-(this.boxUp+this.label.down+this.label.height),
-				this.label.width).addTo(this);
+				y-(this._boxUp+this._label.down+this._label.height),
+				this._label.width).addTo(this);
 		}
 
 		return this;
 	}
 
-	walk(cb) {
+	public walk(cb): void {
 		cb(this);
-		this.item.walk(cb);
-		this.label.walk(cb);
+		this._item.walk(cb);
+		this._label.walk(cb);
 	}
 
-	getDownlineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getDownlineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		return childCtx.parentContainer.next; 
 	}
 
-	getUplineComponent(childCtx: Component): Component {
-		this.assertValidLinageVerification(childCtx);
+	public getUplineComponent(childCtx: Component): Component {
+		this._assertValidLinageVerification(childCtx);
 		return childCtx.parentContainer.previous; 
 	}
 }
 funcs.Group = (...args: any[])=>new Group(...args);
 
-
 export class ZeroOrMore extends Optional implements Conditionable, Repeatable {
-	constructor(item: Component|string, rep: Component|string, skip: string|undefined) {
+	public constructor(item: Component|string, rep: Component|string, skip: string|undefined) {
 		super(new OneOrMore(item, rep), skip);
 	}
 
-	implementsRepeatable() {}
+	public implementsRepeatable(): void {}
 
-	isThreaded(): boolean {
+	public isThreaded(): boolean {
 		return (<OneOrMore>(this.items[0])).isThreaded()
 	}
 }
 funcs.ZeroOrMore = (item: Component|string, rep: Component|string, skip: string|undefined)=>new ZeroOrMore(item, rep, skip);
 
-
-class LabelTitleLinkControl extends Control {
-	constructor(public label?: string, public title?: string, public href?: string, attrs?: object) {
+export abstract class AnchorableControl extends Control {
+	public constructor(public label?: string, public title?: string, public href?: string, attrs?: object) {
 		super('g', attrs);
 		this.label = label ? label : "";
 	}
 
-	protected formatSides(x: number, y: number, width: number, addToRightY=0): number {
+	protected _formatSides(x: number, y: number, width: number, addToRightY=0): number {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		if (this.canConnectUpline()) {
@@ -1747,9 +1733,8 @@ class LabelTitleLinkControl extends Control {
 	}
 }
 
-
-class TerminusNode extends LabelTitleLinkControl {
-	constructor(public type: string="complex", label?: string, title?: string, href?: string, public connected: boolean = true) {
+export class TerminusNode extends AnchorableControl {
+	public constructor(public type: string="complex", label?: string, title?: string, href?: string, public connected: boolean = true) {
 		super(label, title, href);
 		this.width = 20;
 		this.height = 0;
@@ -1762,9 +1747,9 @@ class TerminusNode extends LabelTitleLinkControl {
 		}
 	}
 
-	format(x?: number,y?: number, width?: number): FakeSVG {
+	public format(x?: number,y?: number, width?: number): FakeSVG {
 		if(this.label) {
-			var text = new FakeSVG('text', this.formatTextElementAttr(x, y), this.label);
+			var text = new FakeSVG('text', this._formatTextElementAttr(x, y), this.label);
 			if(this.href)
 				new FakeSVG('a', {'xlink:href': this.href}, [text]).addTo(this);
 			else
@@ -1775,14 +1760,13 @@ class TerminusNode extends LabelTitleLinkControl {
 		return this;
 	}
 
-	protected formatTextElementAttr(x: number, y: number): object {
+	protected _formatTextElementAttr(x: number, y: number): Object {
 		return { x: x, y: y - 15, style: "text-anchor:start" };
 	}
 }
 
-
 export class Start extends TerminusNode {
-	constructor(type: string="simple", label: string=undefined, href: string=undefined, connected:boolean=true) {
+	public constructor(type: string="simple", label: string=undefined, href: string=undefined, connected:boolean=true) {
 		super(type, label, undefined, href, connected);
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
@@ -1790,8 +1774,8 @@ export class Start extends TerminusNode {
 		}
 	}
 
-	format(x?: number,y?: number, width?: number): FakeSVG {
-		x = this.formatSides(x, y, width);
+	public format(x?: number,y?: number, width?: number): FakeSVG {
+		x = this._formatSides(x, y, width);
 		let path = new Path(x, y-10);
 		if (this.type === "complex") {
 				path.downFn(20)
@@ -1809,15 +1793,14 @@ export class Start extends TerminusNode {
 		return super.format(x, y, width);
 	}
 
-	isEntrySupported(): boolean {
+	public isEntrySupported(): boolean {
 		return this.connected;
 	}
 }
 funcs.Start = (...args)=>new Start(...args);
 
-
 export class End extends TerminusNode {
-	constructor(type: string="simple", label: string=undefined, href: string=undefined, connected:boolean=true) {
+	public constructor(type: string="simple", label: string=undefined, href: string=undefined, connected:boolean=true) {
 		super(type, label, undefined, href, connected);
 		this.width = 20; // restore it back
 		if(Options.DEBUG) {
@@ -1825,8 +1808,9 @@ export class End extends TerminusNode {
 			this.attrs['data-type'] = "end";
 		}
 	}
-	format(x?: number,y?: number, width?: number): FakeSVG {
-		x = this.formatSides(x, y, width);
+	
+	public format(x?: number,y?: number, width?: number): FakeSVG {
+		x = this._formatSides(x, y, width);
 		let path = new Path(x, y-10);
 		if (this.type === "complex") {
 			(<PathAttributes>path.attrs).d = 'M '+x+' '+y+' h 20 m 0 -10 v 20';
@@ -1837,24 +1821,23 @@ export class End extends TerminusNode {
 		return super.format(x, y, width);
 	} 
 
-	protected formatTextElementAttr(x: number, y: number): object {
+	protected _formatTextElementAttr(x: number, y: number): object {
 		return { x: x, y: y - 15, style: "text-anchor:start" }; // "text-anchor:end"
 	}
 
-	isExitSupported(): boolean {
+	public isExitSupported(): boolean {
 		return this.connected;
 	}
 }
 funcs.End = (...args)=>new End(...args);
 
-
-class NonTerminusNode extends LabelTitleLinkControl {
-	constructor(label: string, public title?: string, href?: string, attr?: object) {
+export class NonTerminusNode extends AnchorableControl {
+	public constructor(label: string, public title?: string, href?: string, attr?: object) {
 		super(label, title, href, attr);
-		this.initialiseSizing();
+		this._initialiseSizing();
 	}
 
-	initialiseSizing() {
+	protected _initialiseSizing(): void {
 		this.width = this.label.length * Options.CHAR_WIDTH + 20; /* Assume that each char is .5em, and that the em is 16px */
 		this.height = 0;
 		this.up = 11;
@@ -1862,7 +1845,7 @@ class NonTerminusNode extends LabelTitleLinkControl {
 		this.needsSpace = true;
 	}
 
-	protected formatLabelTitleLink(x: number, y: number, attr: object): FakeSVG {
+	protected _formatAnchor(x: number, y: number, attr: object): FakeSVG {
 		var text = new FakeSVG('text', attr, this.label);
 		if (this.href)
 			new FakeSVG('a', { 'xlink:href': this.href }, [text]).addTo(this);
@@ -1874,45 +1857,44 @@ class NonTerminusNode extends LabelTitleLinkControl {
 	}
 }
 
-
 export class Terminal extends NonTerminusNode {
-	constructor(label: string, public title: string=undefined, href: string=undefined) {
+	public constructor(label: string, public title: string=undefined, href: string=undefined) {
 		super(label, title, href, {'class': 'terminal'});
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "terminal";
 		}
 	}
-	format(x?: number,y?: number,width?: number): FakeSVG {
-		x = this.formatSides(x, y, width);
+
+	public format(x?: number,y?: number,width?: number): FakeSVG {
+		x = this._formatSides(x, y, width);
 		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down, rx:10, ry:10}).addTo(this);
-		this.formatLabelTitleLink(x, y, {x: x + this.width / 2, y: y + 4 });
+		this._formatAnchor(x, y, {x: x + this.width / 2, y: y + 4 });
 		return this;
 	}
 }
 funcs.Terminal = (l, ...args)=>new Terminal(l, ...args);
 
-
 export class NonTerminal extends NonTerminusNode {
-	constructor(label: string, public title: string=undefined, href: string=undefined) {
+	public constructor(label: string, public title: string=undefined, href: string=undefined) {
 		super(label, title, href, {'class': 'non-terminal'});
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "nonterminal";
 		}
 	}
-	format(x?: number,y?: number,width?: number): FakeSVG {
-		x = this.formatSides(x, y, width);
+
+	public format(x?: number,y?: number,width?: number): FakeSVG {
+		x = this._formatSides(x, y, width);
 		new FakeSVG('rect', {x:x, y:y-11, width:this.width, height:this.up+this.down}).addTo(this);
-		this.formatLabelTitleLink(x, y, {x: x + this.width / 2, y: y + 4});
+		this._formatAnchor(x, y, {x: x + this.width / 2, y: y + 4});
 		return this;
 	}
 }
 funcs.NonTerminal = (l: string, ...args)=>new NonTerminal(l, ...args);
 
-
 export class Comment extends NonTerminusNode {
-	constructor(label: string, public title: string=undefined, href: string=undefined) {
+	public constructor(label: string, public title: string=undefined, href: string=undefined) {
 		super(label, title, href);
 		// comments have different font/sizing ie. override initialiseSizing::width
 		this.width = this.label.length * Options.COMMENT_CHAR_WIDTH + 10;
@@ -1922,18 +1904,17 @@ export class Comment extends NonTerminusNode {
 		}
 	}
 
-	format(x?: number,y?: number,width?: number): FakeSVG {
+	public format(x?: number,y?: number,width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
-		x = this.formatSides(x, y, width, this.height);
-		this.formatLabelTitleLink(x, y, {x:x+this.width/2, y:y+5, class:'comment'});
+		x = this._formatSides(x, y, width, this.height);
+		this._formatAnchor(x, y, {x:x+this.width/2, y:y+5, class:'comment'});
 		return this;
 	}
 }
 funcs.Comment = (l: string, ...args)=>new Comment(l, ...args);
 
-
 export class Skip extends Control {
-	constructor() {
+	public constructor() {
 		super('g');
 		this.needsSpace = false;
 		if(Options.DEBUG) {
@@ -1941,29 +1922,29 @@ export class Skip extends Control {
 			this.attrs['data-type'] = "skip";
 		}
 	}
-	format(x?: number, y?: number, width?: number): FakeSVG {
+	
+	public format(x?: number, y?: number, width?: number): FakeSVG {
 		new Path(x,y).right(width).addTo(this);
 		return this;
 	}
 }
 funcs.Skip = ()=>new Skip();
 
-
 export class Block extends Control {
-	constructor(width=50, up=15, height=25, down=15, needsSpace=true) {
+	public constructor(width=50, up=15, height=25, down=15, needsSpace=true) {
 		super('g');
 		this.width = width;
 		this.height = height;
 		this.up = up;
 		this.down = down;
-		this.needsSpace = true;
+		this.needsSpace = needsSpace;
 		if(Options.DEBUG) {
 			this.attrs['data-updown'] = this.up + " " + this.height + " " + this.down;
 			this.attrs['data-type'] = "block";
 		}
 	}
 
-	format(x?:number, y?: number, width?: number) {
+	public format(x?:number, y?: number, width?: number): FakeSVG {
 		// Hook up the two sides if this is narrower than its stated width.
 		var gaps = determineGaps(width, this.width);
 		new Path(x,y).h(gaps[0]).addTo(this);
@@ -1975,14 +1956,13 @@ export class Block extends Control {
 }
 funcs.Block = (...args)=>new Block(...args);
 
-
-function unnull(...args: any) {
+export function unnull(...args: any): any {
 	// Return the first value that isn't undefined.
 	// More correct than `v1 || v2 || v3` because falsey values will be returned.
 	return args.reduce(function(sofar, x) { return sofar !== undefined ? sofar : x; });
 }
 
-function determineGaps(outer: number, inner: number): number[] {
+export function determineGaps(outer: number, inner: number): number[] {
 	var diff = outer - inner;
 	switch(Options.INTERNAL_ALIGNMENT) {
 		case 'left': return [0, diff];
@@ -1991,24 +1971,24 @@ function determineGaps(outer: number, inner: number): number[] {
 	}
 }
 
-function makeTerminalIfString(value: Component|string):Component {
+export function makeTerminalIfString(value: Component|string): Component {
 		return value instanceof Component ? value : new Terminal(""+value);
 }
 
-function sum(iter, func) {
+export function sum(iter, func): any {
 	if(!func) func = function(x) { return x; };
 	return iter.map(func).reduce(function(a,b){return a+b}, 0);
 }
 
-function max(iter, func) {
+export function max(iter, func): any {
 	if(!func) func = function(x) { return x; };
 	return Math.max.apply(null, iter.map(func));
 }
 
-function SVG(name, attrs?: object, text?: string): any {
+export function SVG(name: string, attrs?: Object, text?: string): any {
 	attrs = attrs || {};
 	text = text || '';
-	var el = document.createElementNS("http://www.w3.org/2000/svg",name);
+	var el = document.createElementNS("http://www.w3.org/2000/svg", name);
 	for(var attr in attrs) {
 		if(attr === 'xlink:href')
 			el.setAttributeNS("http://www.w3.org/1999/xlink", 'href', attrs[attr]);
@@ -2019,9 +1999,9 @@ function SVG(name, attrs?: object, text?: string): any {
 	return el;
 }
 
-function escapeString(string) {
+export function escapeString(str: string): string {
 	// Escape markdown and HTML special characters
-	return string.replace(/[*_\`\[\]<&]/g, function(charString) {
+	return str.replace(/[*_\`\[\]<&]/g, function(charString) {
 		return '&#' + charString.charCodeAt(0) + ';';
 	});
 }
